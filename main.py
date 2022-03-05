@@ -126,7 +126,7 @@ def main():
             es_patience += 1
             if es_patience >= args.es_patience_max:
                 print('\n[Warning] Early stopping model')
-                print('  | Best  | loss {:5.4f} | ppl {:8.2f} | acc {:5.4f} |'
+                print('  | Best  |  Loss {:5.4f} | Accuracy {:5.4f} | F1 {:5.4f} |'
                       .format(best_val_loss, math.exp(best_val_loss), best_acc))
                 break
 
