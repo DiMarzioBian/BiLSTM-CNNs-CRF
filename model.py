@@ -4,61 +4,95 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class FNNModel(nn.Module):
-    def __init__(self, args):
-        super(FNNModel, self).__init__()
-        self.n_token = args.n_token
-        self.h_dim = args.h_dim
-        self.n_gram = args.n_gram
-        self.skip_connect = args.skip_connect
-        self.share_embedding = args.share_embedding
-        self.share_embedding_strict = args.share_embedding_strict
+class BiLSTM_CRF(nn.Module):
 
-        self.encoder = nn.Embedding(self.n_token, self.h_dim)
-        self.fc1 = nn.Linear(self.h_dim * self.n_gram, self.h_dim)
+    def __init__(self, args, tag2idx, ):
+        """
+        Input parameters from args:
 
-        # Direct/skip-connection
-        if self.skip_connect:
-            self.fc2 = nn.Linear(self.h_dim * self.n_gram, self.n_token)
+                vocab_size= Size of vocabulary (int)
+                tag2idx = Dictionary that maps NER tags to indices
+                embedding_dim = Dimension of word embeddings (int)
+                hidden_dim = The hidden dimension of the LSTM layer (int)
+                char_to_ix = Dictionary that maps characters to indices
+                pre_word_embeds = Numpy array which provides mapping from word embeddings to word indices
+                char_out_dimension = Output dimension from the CNN encoder for character
+                char_embedding_dim = Dimension of the character embeddings
+                use_crf = parameter which decides if you want to use the CRF layer for output decoding
+        """
+        super(BiLSTM_CRF, self).__init__()
+        self.embedding_dim = args.word_dim
+        self.hidden_dim = hidden_dim
+        self.vocab_size = vocab_size
+        self.tag2idx = tag2idx
+        self.use_crf = use_crf
+        self.tagset_size = len(tag2idx)
+        self.out_channels = char_out_dimension
+        self.char_mode = args.char_mode
+        self.START_TAG = args.START_TAG
+        self.STOP_TAG = args.STOP_TAG
 
-        # Encoder-decoder sharing
-        if not self.share_embedding:
-            self.decoder = nn.Linear(self.h_dim, self.n_token)
-        elif self.share_embedding_strict:
-            # Strictly shared, as there's no bias in embedding
-            self.decoder = nn.Linear(self.h_dim, self.n_token, bias=False)
-            self.decoder.weight = self.encoder.weight
+        if char_embedding_dim is not None:
+            self.char_embedding_dim = char_embedding_dim
+
+            # Initializing the character embedding layer
+            self.char_embeds = nn.Embedding(len(char_to_ix), char_embedding_dim)
+            init_embedding(self.char_embeds.weight)
+
+            # Performing LSTM encoding on the character embeddings
+            if self.char_mode == 'LSTM':
+                self.char_lstm = nn.LSTM(char_embedding_dim, char_lstm_dim, num_layers=1, bidirectional=True)
+                init_lstm(self.char_lstm)
+
+            # Performing CNN encoding on the character embeddings
+            if self.char_mode == 'CNN':
+                self.char_cnn3 = nn.Conv2d(in_channels=1, out_channels=self.out_channels,
+                                           kernel_size=(3, char_embedding_dim), padding=(2, 0))
+
+        # Creating Embedding layer with dimension of ( number of words * dimension of each word)
+        self.word_embeds = nn.Embedding(vocab_size, embedding_dim)
+        if pre_word_embeds is not None:
+            # Initializes the word embeddings with pretrained word embeddings
+            self.pre_word_embeds = True
+            self.word_embeds.weight = nn.Parameter(torch.FloatTensor(pre_word_embeds))
         else:
-            # Softly shared, on shared weights but not biases
-            self.decoder = nn.Linear(self.h_dim, self.n_token, bias=True)
-            self.decoder.weight = self.encoder.weight
+            self.pre_word_embeds = False
 
-        self.drop = nn.Dropout(p=args.dropout)
-        self.init_weights()
+        # Initializing the dropout layer, with dropout specificed in parameters
+        self.dropout = nn.Dropout(parameters['dropout'])
 
-    # Init parameters
-    def init_weights(self):
-        std_var = 1.0 / math.sqrt(self.h_dim)
-        nn.init.uniform_(self.encoder.weight, -std_var, std_var)
-        nn.init.uniform_(self.fc1.weight, -std_var, std_var)
-        nn.init.zeros_(self.fc1.bias)
+        # Lstm Layer:
+        # input dimension: word embedding dimension + character level representation
+        # bidirectional=True, specifies that we are using the bidirectional LSTM
+        if self.char_mode == 'LSTM':
+            self.lstm = nn.LSTM(self.embedding_dim + char_lstm_dim * 2, self.hidden_dim, bidirectional=True)
+        if self.char_mode == 'CNN':
+            self.lstm = nn.LSTM(self.embedding_dim + self.out_channels, self.hidden_dim, bidirectional=True)
 
-        if self.skip_connect:
-            nn.init.uniform_(self.fc2.weight, -std_var, std_var)
-            nn.init.zeros_(self.fc2.bias)
+        # Initializing the lstm layer using predefined function for initialization
+        init_lstm(self.lstm)
 
-        if not self.share_embedding:
-            nn.init.uniform_(self.decoder.weight, -std_var, std_var)
-            nn.init.zeros_(self.decoder.bias)
-        elif not self.share_embedding_strict:
-            nn.init.zeros_(self.decoder.bias)
+        # Linear layer which maps the output of the bidirectional LSTM into tag space.
+        self.hidden2tag = nn.Linear(hidden_dim * 2, self.tagset_size)
 
-    def forward(self, x):
-        x_emb = self.drop(self.encoder(x))
-        output = self.fc1(x_emb.view(-1, self.h_dim * self.n_gram))
-        output = self.decoder(output)
+        # Initializing the linear layer using predefined function for initialization
+        init_linear(self.hidden2tag)
 
-        if self.skip_connect:
-            output_skip = self.fc2(x_emb.view(-1, self.h_dim * self.n_gram))
-            output += output_skip
-        return output
+        if self.use_crf:
+            # Matrix of transition parameters.  Entry i,j is the score of transitioning *to* i *from* j.
+            # Matrix has a dimension of (total number of tags * total number of tags)
+            self.transitions = nn.Parameter(
+                torch.zeros(self.tagset_size, self.tagset_size))
+
+            # These two statements enforce the constraint that we never transfer
+            # to the start tag and we never transfer from the stop tag
+            self.transitions.data[self.tag2idx[self.START_TAG], :] = -10000
+            self.transitions.data[:, self.tag2idx[self.STOP_TAG]] = -10000
+
+    # assigning the functions, which we have defined earlier
+    _score_sentence = score_sentences
+    _get_lstm_features = get_lstm_features
+    _forward_alg = forward_alg
+    viterbi_decode = viterbi_algo
+    neg_log_likelihood = get_neg_log_likelihood
+    forward = forward_calc

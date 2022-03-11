@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.onnx
 
 from dataloader import get_dataloader
-from model import FNNModel
+from model import BiLSTM_CRF
 from epoch import train, evaluate
 
 
@@ -16,13 +16,15 @@ def main():
                         help='random seed')
     parser.add_argument('--device', type=str, default='cuda:0',
                         help='device for modeling')
-    parser.add_argument('--path_data', type=str, default='./data/processsed/',
+    parser.add_argument('--path_data', type=str, default='./data/data_bundle.pkl',
+                        help='location of the data corpus')
+    parser.add_argument('--path_pretrained', type=str, default='./data/trained-model-cpu',
                         help='location of the data corpus')
     parser.add_argument('--num_worker', type=int, default=25,
                         help='number of dataloader worker')
     parser.add_argument('--initial_preprocess', type=bool, default=False,
                         help='use initial data preprocess strategy')
-    parser.add_argument('--batch_size', type=int, default=1000, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=100, metavar='N',
                         help='batch size')
     parser.add_argument('--epochs', type=int, default=200,
                         help='upper epoch limit')
@@ -33,6 +35,8 @@ def main():
     parser.add_argument('--char_dim', type=int, default=30,
                         help='char embedding dimension')
     parser.add_argument('--word_dim', type=int, default=100,
+                        help='token embedding dimension')
+    parser.add_argument('--word_lstm_dim', type=int, default=200,
                         help='token embedding dimension')
     parser.add_argument('--clip_gradient', type=float, default=5.0,
                         help='gradient clipping threshold')
@@ -65,7 +69,7 @@ def main():
     my_dict, train_loader, valid_loader, test_loader = get_dataloader(args)
     args.n_token = len(my_dict)
 
-    model = FNNModel(args).to(args.device)
+    model = BiLSTM_CRF(args).to(args.device)
     args.criterion = nn.CrossEntropyLoss()
 
     if args.optimizer == 'Adam':
