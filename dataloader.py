@@ -1,5 +1,3 @@
-import os
-from io import open
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -23,32 +21,8 @@ class Dictionary(object):
         return len(self.idx2word)
 
 
-# Tokenize given texts
-def tokenize(dictionary, path):
-    """Tokenizes a text file."""
-    assert os.path.exists(path)
-    # Add words to the dictionary
-    with open(path, 'r', encoding="utf8") as f:
-        for line in f:
-            words = line.split() + ['<eos>']
-            for word in words:
-                dictionary.add_word(word)
-
-    # Tokenize file content
-    with open(path, 'r', encoding="utf8") as f:
-        idss = []
-        for line in f:
-            words = line.split() + ['<eos>']
-            ids = []
-            for word in words:
-                ids.append(dictionary.word2idx[word])
-            idss += ids
-
-    return dictionary, idss
-
-
-class WikiTextData(Dataset):
-    """ WikiText Dataset """
+class CoNLLData(Dataset):
+    """ CoNLLData Dataset """
     def __init__(self, args, tks_file):
         self.initial_preprocess = args.initial_preprocess
         self.n_gram = args.n_gram
@@ -98,21 +72,15 @@ def collate_fn(insts):
 
 def get_dataloader(args, no_dataloader=False):
     """ Get dataloader and dictionary """
-    my_dict = Dictionary()
+    train_data = load_sentences(args.path_data+'eng.train', args.zero_digit)
+    valid_data = load_sentences(args.path_data+'eng.testa', args.zero_digit)
+    test_sentences = load_sentences(args.path_data+'eng.testb', args.zero_digit)
 
-    my_dict, train_data = tokenize(my_dict, path=os.path.join(args.path_data, 'train.txt'))
-    my_dict, valid_data = tokenize(my_dict, path=os.path.join(args.path_data, 'valid.txt'))
-    my_dict, test_data = tokenize(my_dict, path=os.path.join(args.path_data, 'test.txt'))
-
-    if no_dataloader:
-        # For generation and similarity calculation quest which do not need dataloader
-        return my_dict
-
-    train_loader = DataLoader(WikiTextData(args, train_data), batch_size=args.batch_size,
+    train_loader = DataLoader(CoNLLData(args, train_data), batch_size=args.batch_size,
                               num_workers=args.num_worker, collate_fn=collate_fn, shuffle=True)
-    valid_loader = DataLoader(WikiTextData(args, valid_data), batch_size=args.batch_size,
+    valid_loader = DataLoader(CoNLLData(args, valid_data), batch_size=args.batch_size,
                               num_workers=args.num_worker, collate_fn=collate_fn, shuffle=True)
-    test_loader = DataLoader(WikiTextData(args, test_data), batch_size=args.batch_size, num_workers=args.num_worker,
+    test_loader = DataLoader(CoNLLData(args, test_sentences), batch_size=args.batch_size, num_workers=args.num_worker,
                              collate_fn=collate_fn, shuffle=True)
-    return my_dict, train_loader, valid_loader, test_loader
+    return train_loader, valid_loader, test_loader
 

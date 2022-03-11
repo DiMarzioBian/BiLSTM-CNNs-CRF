@@ -11,15 +11,33 @@ from epoch import train, evaluate
 
 
 def main():
-    parser = argparse.ArgumentParser(description='PyTorch Wikitext-2 RNN/LSTM/GRU/Transformer Language Model')
-    parser.add_argument('--path_data', type=str, default='./data/wikitext-2',
+    parser = argparse.ArgumentParser(description='BLSTM-CNNs-CRF project')
+    parser.add_argument('--seed', type=int, default=1111,
+                        help='random seed')
+    parser.add_argument('--device', type=str, default='cuda:0',
+                        help='device for modeling')
+    parser.add_argument('--path_data', type=str, default='./data/processsed/',
                         help='location of the data corpus')
     parser.add_argument('--num_worker', type=int, default=25,
                         help='number of dataloader worker')
     parser.add_argument('--initial_preprocess', type=bool, default=False,
                         help='use initial data preprocess strategy')
-    parser.add_argument('--h_dim', type=int, default=200,
-                        help='size of hidden representation including embeddings')
+    parser.add_argument('--batch_size', type=int, default=1000, metavar='N',
+                        help='batch size')
+    parser.add_argument('--epochs', type=int, default=200,
+                        help='upper epoch limit')
+    parser.add_argument('--es_patience_max', type=int, default=10,
+                        help='Max early stopped patience')
+
+    # hyperparameters to be tuned
+    parser.add_argument('--char_dim', type=int, default=30,
+                        help='char embedding dimension')
+    parser.add_argument('--word_dim', type=int, default=100,
+                        help='token embedding dimension')
+    parser.add_argument('--clip_gradient', type=float, default=5.0,
+                        help='gradient clipping threshold')
+    parser.add_argument('--dropout', type=float, default=0.5,
+                        help='dropout rate applied to layers (0 = no dropout)')
     parser.add_argument('--optimizer', type=str, default='Adam',
                         help='Adam, AdamW, RMSprop, Adagrad, SGD & Initial')
     parser.add_argument('--lr', type=float, default=1e-3,
@@ -30,33 +48,14 @@ def main():
                         help='strength of lr downgrade')
     parser.add_argument('--eps_loss', type=float, default=1e-5,
                         help='minimum loss difference threshold')
-    parser.add_argument('--epochs', type=int, default=200,
-                        help='upper epoch limit')
-    parser.add_argument('--batch_size', type=int, default=1000, metavar='N',
-                        help='batch size')
-    parser.add_argument('--n_gram', type=int, default=40,
-                        help='length of each training sequence')
-    parser.add_argument('--dropout', type=float, default=0.0,
-                        help='dropout applied to layers (0 = no dropout)')
-    parser.add_argument('--skip_connect', type=bool, default=False,
-                        help='add skip_connect from encoder to decoder')
-    parser.add_argument('--share_embedding', type=bool, default=False,
-                        help='shared embedding and decoder weights')
-    parser.add_argument('--share_embedding_strict', type=bool, default=False,
-                        help='strictly shared embedding and decoder weights, no bias')
-    parser.add_argument('--seed', type=int, default=1111,
-                        help='random seed')
-    parser.add_argument('--es_patience_max', type=int, default=10,
-                        help='Max early stopped patience')
-    parser.add_argument('--save', type=str, default='./saved_model/model.pt',
-                        help='path to save the final model')
-    parser.add_argument('--onnx-export', type=str, default='',
-                        help='path to export the final model in onnx format')
-    parser.add_argument('--device', type=str, default='cuda:0',
-                        help='device for modeling')
 
+    # NLP related strategy
+    parser.add_argument('--enable_crf', type=bool, default=True,
+                        help='employ CRF')
     args = parser.parse_args()
     args.device = torch.device(args.device)
+    args.START_TAG = '<START>'
+    args.STOP_TAG = '<STOP>'
     print('\n[info] Project starts...')
 
     torch.manual_seed(args.seed)
