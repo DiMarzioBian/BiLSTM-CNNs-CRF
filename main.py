@@ -31,9 +31,11 @@ def main():
     parser.add_argument('--es_patience_max', type=int, default=10,
                         help='Max early stopped patience')
 
-    # hyperparameters to be tuned
-    parser.add_argument('--char_dim', type=int, default=30,
+    # general settings
+    parser.add_argument('--char_emb_dim', type=int, default=25,
                         help='char embedding dimension')
+    parser.add_argument('--char_out_dim', type=int, default=25,
+                        help='output dimension from the CNN encoder for character')
     parser.add_argument('--word_dim', type=int, default=100,
                         help='token embedding dimension')
     parser.add_argument('--word_lstm_dim', type=int, default=200,
@@ -53,7 +55,7 @@ def main():
     parser.add_argument('--eps_loss', type=float, default=1e-5,
                         help='minimum loss difference threshold')
 
-    # NLP related strategy
+    # NLP related settings
     parser.add_argument('--enable_crf', type=bool, default=True,
                         help='employ CRF')
     args = parser.parse_args()

@@ -3,14 +3,13 @@ import codecs
 import re
 import pickle
 import numpy as np
-from tqdm import tqdm
 
 START_TAG = '<START>'
 STOP_TAG = '<STOP>'
 
 
 def main():
-    parser = argparse.ArgumentParser(description='BLSTM-CNNs-CRF project')
+    parser = argparse.ArgumentParser(description='BiLSTM-CNNs-CRF project')
     parser.add_argument('--seed', type=int, default=1111,
                         help='random seed')
     parser.add_argument('--path_data', type=str, default='./data/raw/',
@@ -27,15 +26,15 @@ def main():
                         help='BIO or BIOES')
     parser.add_argument('--lowercase', type=bool, default=True,
                         help='control lowercasing of words')
-    parser.add_argument('--zero_digits', type=bool, default=True,
+    parser.add_argument('--digi_zero', type=bool, default=True,
                         help='control replacement of  all digits by 0 ')
     args = parser.parse_args()
 
     # preprocess
     print('\n[info] Data preprocess starts...')
-    train_sentences = load_sentences(args.path_data + 'eng.train', args.zero_digits)
-    valid_sentences = load_sentences(args.path_data + 'eng.testa', args.zero_digits)
-    test_sentences = load_sentences(args.path_data + 'eng.testb', args.zero_digits)
+    train_sentences = load_sentences(args.path_data + 'eng.train', args.digi_zero)
+    valid_sentences = load_sentences(args.path_data + 'eng.testa', args.digi_zero)
+    test_sentences = load_sentences(args.path_data + 'eng.testb', args.digi_zero)
 
     update_tag_scheme(train_sentences, args.tag_scheme)
     update_tag_scheme(valid_sentences, args.tag_scheme)
@@ -48,7 +47,8 @@ def main():
     train_data = prepare_dataset(train_sentences, word_to_id, char_to_id, tag_to_id, args.lowercase)
     dev_data = prepare_dataset(valid_sentences, word_to_id, char_to_id, tag_to_id, args.lowercase)
     test_data = prepare_dataset(test_sentences, word_to_id, char_to_id, tag_to_id, args.lowercase)
-    print('Loaded {} / {} / {} sentences in train / valid / test.'.format(len(train_data), len(dev_data), len(test_data)))
+    print(
+        'Loaded {} / {} / {} sentences in train / valid / test.'.format(len(train_data), len(dev_data), len(test_data)))
 
     # load embeddings
     print('\n[info] Load embeddings...')
@@ -58,7 +58,7 @@ def main():
         if len(s) == (args.word_dim + 1):
             all_word_embeds[s[0]] = np.array([float(i) for i in s[1:]])
 
-    word_embeds = np.random.uniform(-np.sqrt(0.06), np.sqrt(0.06), (len(word_to_id), args.word_dim)) # initializing
+    word_embeds = np.random.uniform(-np.sqrt(0.06), np.sqrt(0.06), (len(word_to_id), args.word_dim))  # initializing
     for w in word_to_id:
         if w in all_word_embeds:
             word_embeds[word_to_id[w]] = all_word_embeds[w]
@@ -80,11 +80,11 @@ def main():
     print('\n[info] Preprocess finished.')
 
 
-def zero_digits(s):
+def num_to_zero(s):
     """
     Replace every digit in a string by a zero.
     """
-    return re.sub('\d', '0', s)
+    return re.sub(r'\d', r'0', s)
 
 
 def load_sentences(path, zeros):
@@ -95,7 +95,7 @@ def load_sentences(path, zeros):
     sentences = []
     sentence = []
     for line in codecs.open(path, 'r', 'utf8'):
-        line = zero_digits(line.rstrip()) if zeros else line.rstrip()
+        line = num_to_zero(line.rstrip()) if zeros else line.rstrip()
         if not line:
             if len(sentence) > 0:
                 if 'DOCSTART' not in sentence[0][0]:
@@ -144,7 +144,7 @@ def iob_iobes(tags):
             new_tags.append(tag)
         elif tag.split('-')[0] == 'B':
             if i + 1 != len(tags) and \
-               tags[i + 1].split('-')[0] == 'I':
+                    tags[i + 1].split('-')[0] == 'I':
                 new_tags.append(tag)
             else:
                 new_tags.append(tag.replace('B-', 'S-'))
@@ -260,7 +260,7 @@ def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id, lower=False):
     data = []
     for s in sentences:
         str_words = [w[0] for w in s]
-        words = [word_to_id[lower_case(w,lower) if lower_case(w,lower) in word_to_id else '<UNK>']
+        words = [word_to_id[lower_case(w, lower) if lower_case(w, lower) in word_to_id else '<UNK>']
                  for w in str_words]
         # Skip characters that are not in the training set
         chars = [[char_to_id[c] for c in w if c in char_to_id]

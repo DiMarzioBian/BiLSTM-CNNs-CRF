@@ -1,3 +1,4 @@
+import codecs
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -19,6 +20,30 @@ class Dictionary(object):
 
     def __len__(self):
         return len(self.idx2word)
+
+
+def load_sentences(path, zeros):
+    """
+    Load sentences. A line must contain at least a word and its tag.
+    Sentences are separated by empty lines.
+    """
+    sentences = []
+    sentence = []
+    for line in codecs.open(path, 'r', 'utf8'):
+        line = zero_digits(line.rstrip()) if zeros else line.rstrip()
+        if not line:
+            if len(sentence) > 0:
+                if 'DOCSTART' not in sentence[0][0]:
+                    sentences.append(sentence)
+                sentence = []
+        else:
+            word = line.split()
+            assert len(word) >= 2
+            sentence.append(word)
+    if len(sentence) > 0:
+        if 'DOCSTART' not in sentence[0][0]:
+            sentences.append(sentence)
+    return sentences
 
 
 class CoNLLData(Dataset):
