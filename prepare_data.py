@@ -1,8 +1,9 @@
 import argparse
 import codecs
-import re
 import pickle
 import numpy as np
+
+from utils import load_sentences, update_tag_scheme, prepare_dataset
 
 START_TAG = '<START>'
 STOP_TAG = '<STOP>'
@@ -24,10 +25,10 @@ def main():
     # settings
     parser.add_argument('--tag_scheme', type=str, default='BIOES',
                         help='BIO or BIOES')
-    parser.add_argument('--lowercase', type=bool, default=True,
+    parser.add_argument('--is_lowercase', type=bool, default=True,
                         help='control lowercasing of words')
     parser.add_argument('--digi_zero', type=bool, default=True,
-                        help='control replacement of  all digits by 0 ')
+                        help='control replacement of  all digits by 0')
     args = parser.parse_args()
 
     # preprocess
@@ -40,143 +41,44 @@ def main():
     update_tag_scheme(valid_sentences, args.tag_scheme)
     update_tag_scheme(test_sentences, args.tag_scheme)
 
-    dico_words, word_to_id, id_to_word = word_mapping(train_sentences, args.lowercase)
-    dico_chars, char_to_id, id_to_char = char_mapping(train_sentences)
-    dico_tags, tag_to_id, id_to_tag = tag_mapping(train_sentences)
+    dico_words, word2idx, idx2word = word_mapping(train_sentences, args.is_lowercase)
+    dico_chars, char2idx, idx2char = char_mapping(train_sentences)
+    dico_tags, tag2idx, idx2tag = tag_mapping(train_sentences)
 
-    train_data = prepare_dataset(train_sentences, word_to_id, char_to_id, tag_to_id, args.lowercase)
-    dev_data = prepare_dataset(valid_sentences, word_to_id, char_to_id, tag_to_id, args.lowercase)
-    test_data = prepare_dataset(test_sentences, word_to_id, char_to_id, tag_to_id, args.lowercase)
+    train_data = prepare_dataset(train_sentences, word2idx, char2idx, tag2idx, args.is_lowercase)
+    dev_data = prepare_dataset(valid_sentences, word2idx, char2idx, tag2idx, args.is_lowercase)
+    test_data = prepare_dataset(test_sentences, word2idx, char2idx, tag2idx, args.is_lowercase)
     print(
         'Loaded {} / {} / {} sentences in train / valid / test.'.format(len(train_data), len(dev_data), len(test_data)))
 
     # load embeddings
     print('\n[info] Load embeddings...')
-    all_word_embeds = {}
+    all_embeds_word = {}
     for i, line in enumerate(codecs.open(args.path_embedding, 'r', 'utf-8')):
         s = line.strip().split()
         if len(s) == (args.word_dim + 1):
-            all_word_embeds[s[0]] = np.array([float(i) for i in s[1:]])
+            all_embeds_word[s[0]] = np.array([float(i) for i in s[1:]])
 
-    word_embeds = np.random.uniform(-np.sqrt(0.06), np.sqrt(0.06), (len(word_to_id), args.word_dim))  # initializing
-    for w in word_to_id:
-        if w in all_word_embeds:
-            word_embeds[word_to_id[w]] = all_word_embeds[w]
-        elif w.lower() in all_word_embeds:
-            word_embeds[word_to_id[w]] = all_word_embeds[w.lower()]
-    print('Loaded %i pretrained embeddings.' % len(all_word_embeds))
+    embeds_word = np.random.uniform(-np.sqrt(0.06), np.sqrt(0.06), (len(word2idx), args.word_dim))  # initializing
+    for w in word2idx:
+        if w in all_embeds_word:
+            embeds_word[word2idx[w]] = all_embeds_word[w]
+        elif w.lower() in all_embeds_word:
+            embeds_word[word2idx[w]] = all_embeds_word[w.lower()]
+    print('Loaded %i pretrained embeddings.' % len(all_embeds_word))
 
     # save pickle file
     print('\n[info] Saving files...')
     with open(args.path_processed, 'wb') as f:
         mappings = {
-            'word_to_id': word_to_id,
-            'tag_to_id': tag_to_id,
-            'char_to_id': char_to_id,
+            'word2idx': word2idx,
+            'tag2idx': tag2idx,
+            'char2idx': char2idx,
             'parameters': args,
-            'word_embeds': word_embeds
+            'embeds_word': embeds_word
         }
         pickle.dump(mappings, f)
     print('\n[info] Preprocess finished.')
-
-
-def num_to_zero(s):
-    """
-    Replace every digit in a string by a zero.
-    """
-    return re.sub(r'\d', r'0', s)
-
-
-def load_sentences(path, zeros):
-    """
-    Load sentences. A line must contain at least a word and its tag.
-    Sentences are separated by empty lines.
-    """
-    sentences = []
-    sentence = []
-    for line in codecs.open(path, 'r', 'utf8'):
-        line = num_to_zero(line.rstrip()) if zeros else line.rstrip()
-        if not line:
-            if len(sentence) > 0:
-                if 'DOCSTART' not in sentence[0][0]:
-                    sentences.append(sentence)
-                sentence = []
-        else:
-            word = line.split()
-            assert len(word) >= 2
-            sentence.append(word)
-    if len(sentence) > 0:
-        if 'DOCSTART' not in sentence[0][0]:
-            sentences.append(sentence)
-    return sentences
-
-
-def iob2(tags):
-    """
-    Check that tags have a valid BIO format.
-    Tags in BIO1 format are converted to BIO2.
-    """
-    for i, tag in enumerate(tags):
-        if tag == 'O':
-            continue
-        split = tag.split('-')
-        if len(split) != 2 or split[0] not in ['I', 'B']:
-            return False
-        if split[0] == 'B':
-            continue
-        elif i == 0 or tags[i - 1] == 'O':  # conversion IOB1 to IOB2
-            tags[i] = 'B' + tag[1:]
-        elif tags[i - 1][1:] == tag[1:]:
-            continue
-        else:  # conversion IOB1 to IOB2
-            tags[i] = 'B' + tag[1:]
-    return True
-
-
-def iob_iobes(tags):
-    """
-    the function is used to convert
-    BIO -> BIOES tagging
-    """
-    new_tags = []
-    for i, tag in enumerate(tags):
-        if tag == 'O':
-            new_tags.append(tag)
-        elif tag.split('-')[0] == 'B':
-            if i + 1 != len(tags) and \
-                    tags[i + 1].split('-')[0] == 'I':
-                new_tags.append(tag)
-            else:
-                new_tags.append(tag.replace('B-', 'S-'))
-        elif tag.split('-')[0] == 'I':
-            if i + 1 < len(tags) and \
-                    tags[i + 1].split('-')[0] == 'I':
-                new_tags.append(tag)
-            else:
-                new_tags.append(tag.replace('I-', 'E-'))
-        else:
-            raise Exception('Invalid IOB format!')
-    return new_tags
-
-
-def update_tag_scheme(sentences, tag_scheme):
-    """
-    Check and update sentences tagging scheme to BIO2
-    Only BIO1 and BIO2 schemes are accepted for input data.
-    """
-    for i, s in enumerate(sentences):
-        tags = [w[-1] for w in s]
-        # Check that tags are given in the BIO format
-        if not iob2(tags):
-            s_str = '\n'.join(' '.join(w) for w in s)
-            raise Exception('Sentences should be given in BIO format! ' +
-                            'Please check sentence %i:\n%s' % (i, s_str))
-        if tag_scheme == 'BIOES':
-            new_tags = iob_iobes(tags)
-            for word, new_tag in zip(s, new_tags):
-                word[-1] = new_tag
-        else:
-            raise Exception('Wrong tagging scheme!')
 
 
 def create_dico(item_list):
@@ -212,11 +114,11 @@ def word_mapping(sentences, lower):
     words = [[x[0].lower() if lower else x[0] for x in s] for s in sentences]
     dico = create_dico(words)
     dico['<UNK>'] = 10000000  # UNK tag for unknown words
-    word_to_id, id_to_word = create_mapping(dico)
+    word2idx, idx2word = create_mapping(dico)
     print("Found %i unique words (%i in total)" % (
         len(dico), sum(len(x) for x in words)
     ))
-    return dico, word_to_id, id_to_word
+    return dico, word2idx, idx2word
 
 
 def char_mapping(sentences):
@@ -225,9 +127,9 @@ def char_mapping(sentences):
     """
     chars = ["".join([w[0] for w in s]) for s in sentences]
     dico = create_dico(chars)
-    char_to_id, id_to_char = create_mapping(dico)
+    char2idx, idx2char = create_mapping(dico)
     print("Found %i unique characters" % len(dico))
-    return dico, char_to_id, id_to_char
+    return dico, char2idx, idx2char
 
 
 def tag_mapping(sentences):
@@ -238,41 +140,9 @@ def tag_mapping(sentences):
     dico = create_dico(tags)
     dico[START_TAG] = -1
     dico[STOP_TAG] = -2
-    tag_to_id, id_to_tag = create_mapping(dico)
+    tag2idx, idx2tag = create_mapping(dico)
     print("Found %i unique named entity tags" % len(dico))
-    return dico, tag_to_id, id_to_tag
-
-
-def lower_case(x, lower=False):
-    if lower:
-        return x.lower()
-    else:
-        return x
-
-
-def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id, lower=False):
-    """
-    Prepare the dataset. Return a list of lists of dictionaries containing:
-        - word indexes
-        - word char indexes
-        - tag indexes
-    """
-    data = []
-    for s in sentences:
-        str_words = [w[0] for w in s]
-        words = [word_to_id[lower_case(w, lower) if lower_case(w, lower) in word_to_id else '<UNK>']
-                 for w in str_words]
-        # Skip characters that are not in the training set
-        chars = [[char_to_id[c] for c in w if c in char_to_id]
-                 for w in str_words]
-        tags = [tag_to_id[w[-1]] for w in s]
-        data.append({
-            'str_words': str_words,
-            'words': words,
-            'chars': chars,
-            'tags': tags,
-        })
-    return data
+    return dico, tag2idx, idx2tag
 
 
 if __name__ == '__main__':

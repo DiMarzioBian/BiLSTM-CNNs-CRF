@@ -2,8 +2,7 @@ import codecs
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-# import numpy as np
-# import matplotlib.pyplot as plt
+from utils import load_sentences, update_tag_scheme, prepare_dataset
 
 
 # Dictionary to store all words and their indices
@@ -22,58 +21,11 @@ class Dictionary(object):
         return len(self.idx2word)
 
 
-def load_sentences(path, zeros):
-    """
-    Load sentences. A line must contain at least a word and its tag.
-    Sentences are separated by empty lines.
-    """
-    sentences = []
-    sentence = []
-    for line in codecs.open(path, 'r', 'utf8'):
-        line = zero_digits(line.rstrip()) if zeros else line.rstrip()
-        if not line:
-            if len(sentence) > 0:
-                if 'DOCSTART' not in sentence[0][0]:
-                    sentences.append(sentence)
-                sentence = []
-        else:
-            word = line.split()
-            assert len(word) >= 2
-            sentence.append(word)
-    if len(sentence) > 0:
-        if 'DOCSTART' not in sentence[0][0]:
-            sentences.append(sentence)
-    return sentences
-
-
 class CoNLLData(Dataset):
     """ CoNLLData Dataset """
-    def __init__(self, args, tks_file):
+    def __init__(self, args, f_sentence):
         self.initial_preprocess = args.initial_preprocess
-        self.n_gram = args.n_gram
-        self.tokens_file = tks_file
-        if self.initial_preprocess:
-            self.length = len(tks_file) // (args.n_gram+1)
-        else:
-            self.length = len(tks_file) - args.n_gram
-
-        # EDA: plot frequency
-        # tks = np.array(tks_file)
-        # unique, counts = np.unique(tks, return_counts=True)
-        # counts = counts[::-1]
-        #
-        # fig, axs = plt.subplots(2, 1)
-        # axs[0].plot(counts)
-        # axs[0].set_ylabel('Frequency')
-        # axs[0].grid(True)
-        #
-        # axs[1].plot(np.log(counts))
-        # axs[1].set_ylabel('Frequency in log')
-        # axs[1].set_xlabel('Words / tokens')
-        # axs[1].grid(True)
-        #
-        # fig.tight_layout()
-        # plt.show()
+        self.f_sentence = f_sentence
 
     def __len__(self):
         return self.length
@@ -95,17 +47,25 @@ def collate_fn(insts):
     return seq_tokens_batch, tgt_tokens_batch
 
 
-def get_dataloader(args, no_dataloader=False):
+def get_dataloader(args, word2idx, tag2idx, char2idx):
     """ Get dataloader and dictionary """
-    train_data = load_sentences(args.path_data+'eng.train', args.zero_digit)
-    valid_data = load_sentences(args.path_data+'eng.testa', args.zero_digit)
-    test_sentences = load_sentences(args.path_data+'eng.testb', args.zero_digit)
+    train_data = load_sentences(args.path_data+'eng.train', args.digi_zero)
+    valid_data = load_sentences(args.path_data+'eng.testa', args.digi_zero)
+    test_data = load_sentences(args.path_data+'eng.testb', args.digi_zero)
+
+    update_tag_scheme(train_data, args.tag_scheme)
+    update_tag_scheme(valid_data, args.tag_scheme)
+    update_tag_scheme(test_data, args.tag_scheme)
+
+    train_data = prepare_dataset(train_data, word2idx, char2idx, tag2idx, args.is_lowercase)
+    valid_data = prepare_dataset(valid_data, word2idx, char2idx, tag2idx, args.is_lowercase)
+    test_data = prepare_dataset(test_data, word2idx, char2idx, tag2idx, args.is_lowercase)
 
     train_loader = DataLoader(CoNLLData(args, train_data), batch_size=args.batch_size,
                               num_workers=args.num_worker, collate_fn=collate_fn, shuffle=True)
     valid_loader = DataLoader(CoNLLData(args, valid_data), batch_size=args.batch_size,
                               num_workers=args.num_worker, collate_fn=collate_fn, shuffle=True)
-    test_loader = DataLoader(CoNLLData(args, test_sentences), batch_size=args.batch_size, num_workers=args.num_worker,
+    test_loader = DataLoader(CoNLLData(args, test_data), batch_size=args.batch_size, num_workers=args.num_worker,
                              collate_fn=collate_fn, shuffle=True)
     return train_loader, valid_loader, test_loader
 
