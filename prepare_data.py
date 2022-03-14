@@ -72,9 +72,8 @@ def main():
     with open(args.path_processed, 'wb') as f:
         mappings = {
             'word2idx': word2idx,
-            'tag2idx': tag2idx,
             'char2idx': char2idx,
-            'parameters': args,
+            'tag2idx': tag2idx,
             'embeds_word': embeds_word
         }
         pickle.dump(mappings, f)

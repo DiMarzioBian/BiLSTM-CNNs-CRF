@@ -5,101 +5,90 @@ import torch.nn.functional as F
 
 
 def log_sum_exp(vec):
-    '''
+    """
     This function calculates the score explained above for the forward algorithm
     vec 2D: 1 * size_tag
-    '''
+    """
     max_score = vec[0, argmax(vec)]
     max_score_broadcast = max_score.view(1, -1).expand(1, vec.size()[1])
     return max_score + torch.log(torch.sum(torch.exp(vec - max_score_broadcast)))
 
 
 def argmax(vec):
-    '''
+    """
     This function returns the max index in a vector
-    '''
+    """
     _, idx = torch.max(vec, 1)
-    return to_scalar(idx)
-
-
-def to_scalar(var):
-    '''
-    Function to convert pytorch tensor to a scalar
-    '''
-    return var.view(-1).data.tolist()[0]
+    return idx.view(-1).data.tolist()[0]
 
 
 class BiLSTM_CRF(nn.Module):
-    def __init__(self, args, tag2idx, emb_word):
+    def __init__(self, args, glove_word, word2idx, tag2idx, char2idx):
         """
         Input parameters from args:
 
-                tag2idx = Dictionary that maps NER tags to indices
-                embedding_dim = Dimension of word embeddings (int)
-                hidden_dim =
-                char_to_ix = Dictionary that maps characters to indices
-                pre_word_embeds = Numpy array which provides mapping from word embeddings to word indices
-                char_out_dimension = Output dimension from the CNN encoder for character
-                char_embedding_dim = Dimension of the character embeddings
+                args = Dictionary that maps NER tags to indices
+                word2idx = Dimension of word embeddings (int)
+                tag2idx = hidden state dimension
+                char2idx = Dictionary that maps characters to indices
+                glove_word = Numpy array which provides mapping from word embeddings to word indices
         """
         super(BiLSTM_CRF, self).__init__()
         self.START_TAG = args.START_TAG
         self.STOP_TAG = args.STOP_TAG
-        self.emb_dim = args.word_dim  # dimension of word embeddings (int)
-        self.hidden_dim = args.hidden_dim  # The hidden dimension of the LSTM layer (int)
-        self.size_vocab = args.size_vocab  # Size of vocabulary (int)
+        self.glove_word = glove_word
+        self.word2idx = word2idx
         self.tag2idx = tag2idx
-        self.size_tag = len(tag2idx)
-        self.use_crf = args.use_crf  # parameter which decides if you want to use the CRF layer for output decoding
-        self.char_emb_dim = args.char_emb_dim  # dimension of the character embeddings
+        self.char2idx = char2idx
+        self.n_word = len(word2idx)
+        self.n_tag = len(tag2idx)
+        self.n_char = len(char2idx)
+
+        self.dim_word_glove = args.dim_word_glove
+        self.dim_word_emb = args.dim_word_emb  # dimension of word embeddings (int)
+        self.dim_char_emb = args.dim_char_emb
+
+        self.dim_lstm_char = args.dim_lstm_hidden
+        self.dim_lstm_hidden = args.dim_lstm_hidden  # The hidden dimension of the LSTM layer (int)
         self.out_channels = args.char_out_dim  # dimension of the character embeddings
+
+        self.mode_char = args.mode_char
+        self.mode_word = args.mode_word
+        self.use_crf = args.use_crf  # parameter which decides if you want to use the CRF layer for output decoding
         self.mode_char = args.mode_char
 
-        if char_embedding_dim is not None:
-            self.char_embedding_dim = char_embedding_dim
+        # model architecture
+        self.embedding_word = nn.Embedding(self.n_word, self.dim_word_emb)
 
-            # Initializing the character embedding layer
-            self.char_embeds = nn.Embedding(len(char_to_ix), char_embedding_dim)
-            init_embedding(self.char_embeds.weight)
+        if self.dim_char_emb is not None:
+            self.embedding_char = nn.Embedding(len(char2idx), self.dim_char_emb)
 
             # Performing LSTM encoding on the character embeddings
-            if self.char_mode == 'LSTM':
-                self.char_lstm = nn.LSTM(char_embedding_dim, char_lstm_dim, num_layers=1, bidirectional=True)
-                init_lstm(self.char_lstm)
+            if self.mode_char == 'LSTM':
+                self.char_lstm = nn.LSTM(self.dim_char_emb, self.dim_lstm_char, num_layers=1, bidirectional=True)
 
             # Performing CNN encoding on the character embeddings
-            if self.char_mode == 'CNN':
+            if self.mode_char == 'CNN':
                 self.char_cnn3 = nn.Conv2d(in_channels=1, out_channels=self.out_channels,
-                                           kernel_size=(3, char_embedding_dim), padding=(2, 0))
+                                           kernel_size=(3, self.char_emb_dim), padding=(2, 0))
 
-        # Creating Embedding layer with dimension of ( number of words * dimension of each word)
-        self.word_embeds = nn.Embedding(self.size_vocab, embedding_dim)
-        if pre_word_embeds is not None:
+        if self.dim_word_glove is not None:
             # Initializes the word embeddings with pretrained word embeddings
-            self.pre_word_embeds = True
-            self.word_embeds.weight = nn.Parameter(torch.FloatTensor(pre_word_embeds))
+            self.dim_word_glove = True
+            self.word_embeds.weight = nn.Parameter(torch.FloatTensor(self.dim_word_glove))
         else:
-            self.pre_word_embeds = False
+            self.dim_word_glove = False
 
-        # Initializing the dropout layer, with dropout specificed in parameters
-        self.dropout = nn.Dropout(parameters['dropout'])
+        self.dropout = nn.Dropout(self.dropout)
 
-        # Lstm Layer:
-        # input dimension: word embedding dimension + character level representation
-        # bidirectional=True, specifies that we are using the bidirectional LSTM
+        # Lstm Layer
         if self.char_mode == 'LSTM':
-            self.lstm = nn.LSTM(self.embedding_dim + char_lstm_dim * 2, self.hidden_dim, bidirectional=True)
+            self.lstm = nn.LSTM(self.emb_dim + self.dim_lstm_char * 2, self.dim_lstm_hidden, bidirectional=True)
         if self.char_mode == 'CNN':
-            self.lstm = nn.LSTM(self.embedding_dim + self.out_channels, self.hidden_dim, bidirectional=True)
-
-        # Initializing the lstm layer using predefined function for initialization
-        init_lstm(self.lstm)
+            self.lstm = nn.LSTM(self.emb_dim + self.out_channels, self.dim_lstm_hidden, bidirectional=True)
 
         # Linear layer which maps the output of the bidirectional LSTM into tag space.
-        self.hidden2tag = nn.Linear(hidden_dim * 2, self.size_tag)
-
-        # Initializing the linear layer using predefined function for initialization
-        init_linear(self.hidden2tag)
+        self.hidden2tag = nn.Linear(self.dim_lstm_hidden * 2, self.size_tag)
 
         if self.use_crf:
             # Matrix of transition parameters.  Entry i,j is the score of transitioning *to* i *from* j.
@@ -111,12 +100,6 @@ class BiLSTM_CRF(nn.Module):
             # to the start tag and we never transfer from the stop tag
             self.transitions.data[self.tag2idx[self.START_TAG], :] = -10000
             self.transitions.data[:, self.tag2idx[self.STOP_TAG]] = -10000
-
-    # assigning the functions, which we have defined earlier
-    _score_sentence = score_sentences
-    _forward_alg = forward_alg
-    viterbi_decode = viterbi_algo
-    neg_log_likelihood = get_neg_log_likelihood
 
     def get_lstm_features(self, sentence, chars2, chars2_length, d):
         if self.mode_char == 'lstm':
@@ -131,7 +114,7 @@ class BiLSTM_CRF(nn.Module):
 
             outputs = outputs.transpose(0, 1)
 
-            chars_embeds_temp = Variable(torch.FloatTensor(torch.zeros((outputs.size(0), outputs.size(2)))))
+            chars_embeds_temp = torch.FloatTensor(torch.zeros((outputs.size(0), outputs.size(2))), requires_grad=True)
 
             if self.use_gpu:
                 chars_embeds_temp = chars_embeds_temp.cuda()
@@ -149,7 +132,7 @@ class BiLSTM_CRF(nn.Module):
             chars_embeds = self.char_embeds(chars2).unsqueeze(1)
 
             # Creating Character level representation using Convolutional Neural Netowrk
-            # followed by a Maxpooling Layer
+            # followed by a max pooling Layer
             chars_cnn_out3 = self.char_cnn3(chars_embeds)
             chars_embeds = nn.functional.max_pool2d(chars_cnn_out3,
                                                     kernel_size=(chars_cnn_out3.size(2), 1)).view(
@@ -165,7 +148,7 @@ class BiLSTM_CRF(nn.Module):
 
         # word lstm
         lstm_out, _ = self.lstm(embeds)
-        lstm_out = lstm_out.view(len(sentence), self.hidden_dim * 2)
+        lstm_out = lstm_out.view(len(sentence), self.dim_lstm_hidden * 2)
         lstm_out = self.dropout(lstm_out)
         lstm_feats = self.hidden2tag(lstm_out)
 
@@ -196,13 +179,12 @@ class BiLSTM_CRF(nn.Module):
         # Do the forward algorithm to compute the partition function
         init_alphas = torch.Tensor(1, self.size_tag).fill_(-10000.)
 
-        # START_TAG has all of the score.
-        init_alphas[0][self.tag_to_ix[START_TAG]] = 0.
+        # START_TAG has all score.
+        init_alphas[0][self.tag2idx[self.START_TAG]] = 0.
 
         # Wrap in a variable so that we will get automatic backprop
-        forward_var = autograd.Variable(init_alphas)
-        if self.use_gpu:
-            forward_var = forward_var.cuda()
+        forward_var = init_alphas.clone().to(feats.device)
+        forward_var.require_grad = True
 
         # Iterate through the sentence
         for feat in feats:
@@ -224,8 +206,79 @@ class BiLSTM_CRF(nn.Module):
 
             # Compute log sum exp in a numerically stable way for the forward algorithm
             forward_var = max_tag_var + torch.log(torch.sum(torch.exp(tag_var), dim=1)).view(1, -1)  # ).view(1, -1)
-        terminal_var = (forward_var + self.transitions[self.tag_to_ix[STOP_TAG]]).view(1, -1)
+        terminal_var = (forward_var + self.transitions[self.tag2idx[self.STOP_TAG]]).view(1, -1)
         alpha = log_sum_exp(terminal_var)
         # Z(x)
         return alpha
 
+    def score_sentences(self, feats, tags):
+        # tags is ground_truth, a list of ints, length is len(sentence)
+        # feats is a 2D tensor, len(sentence) * tag_size
+        r = torch.LongTensor(range(feats.size()[0])).to(feats.device)
+        pad_start_tags = torch.cat([torch.LongTensor([self.tag2idx[self.START_TAG]]), tags])
+        pad_stop_tags = torch.cat([tags, torch.LongTensor([self.tag2idx[self.STOP_TAG]])])
+
+        score = torch.sum(self.transitions[pad_stop_tags, pad_start_tags]) + torch.sum(feats[r, tags])
+
+        return score
+
+    def viterbi_decode(self, feats):
+        """
+        In this function, we implement the viterbi algorithm explained above.
+        A Dynamic programming based approach to find the best tag sequence
+        """
+        backpointers = []
+        # analogous to forward
+
+        # Initialize the viterbi variables in log space
+        init_vvars = torch.Tensor(1, self.tagset_size).fill_(-10000.)
+        init_vvars[0][self.tag_to_ix[self.START_TAG]] = 0
+
+        # forward_var at step i holds the viterbi variables for step i-1
+        forward_var = init_vvars.re
+        if self.use_gpu:
+            forward_var = forward_var.cuda()
+        for feat in feats:
+            next_tag_var = forward_var.view(1, -1).expand(self.tagset_size, self.tagset_size) + self.transitions
+            _, bptrs_t = torch.max(next_tag_var, dim=1)
+            bptrs_t = bptrs_t.squeeze().data.cpu().numpy()  # holds the backpointers for this step
+            next_tag_var = next_tag_var.data.cpu().numpy()
+            viterbivars_t = next_tag_var[range(len(bptrs_t)), bptrs_t]  # holds the viterbi variables for this step
+            viterbivars_t = torch.FloatTensor(viterbivars_t, require_grad=True, device=feats.device)
+
+            # Now add in the emission scores, and assign forward_var to the set
+            # of viterbi variables we just computed
+            forward_var = viterbivars_t + feat
+            backpointers.append(bptrs_t)
+
+        # Transition to STOP_TAG
+        terminal_var = forward_var + self.transitions[self.tag2idx[self.STOP_TAG]]
+        terminal_var.data[self.tag2idx[self.STOP_TAG]] = -10000.
+        terminal_var.data[self.tag2idx[self.START_TAG]] = -10000.
+        best_tag_id = argmax(terminal_var.unsqueeze(0))
+        path_score = terminal_var[best_tag_id]
+
+        # Follow the back pointers to decode the best path.
+        best_path = [best_tag_id]
+        for bptrs_t in reversed(backpointers):
+            best_tag_id = bptrs_t[best_tag_id]
+            best_path.append(best_tag_id)
+
+        # Pop off the start tag (we dont want to return that to the caller)
+        start = best_path.pop()
+        assert start == self.tag2idx[self.START_TAG]  # Sanity check
+        best_path.reverse()
+        return path_score, best_path
+
+    def cal_nll(self, sentence, tags, chars2, chars2_length, d):
+        # sentence, tags is a list of ints
+        # features is a 2D tensor, len(sentence) * self.tag_size
+        feats = self._get_lstm_features(sentence, chars2, chars2_length, d)
+
+        if self.use_crf:
+            forward_score = self._forward_alg(feats)
+            gold_score = self._score_sentence(feats, tags)
+            return forward_score - gold_score
+        else:
+            scores = nn.functional.cross_entropy(feats, tags)
+            return scores

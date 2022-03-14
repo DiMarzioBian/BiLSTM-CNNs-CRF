@@ -23,28 +23,27 @@ class Dictionary(object):
 
 class CoNLLData(Dataset):
     """ CoNLLData Dataset """
-    def __init__(self, args, f_sentence):
+    def __init__(self, args, data):
         self.initial_preprocess = args.initial_preprocess
-        self.f_sentence = f_sentence
+        self.data = data
+        self.length = len(data)
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, index):
-        if self.initial_preprocess:
-            return self.tokens_file[index * self.n_gram: (index+1) * self.n_gram], \
-                   self.tokens_file[(index+1) * self.n_gram]
-        else:
-            return self.tokens_file[index: index+self.n_gram], self.tokens_file[index+self.n_gram]
+        return self.data[index]['words'], self.data[index]['chars'], self.data[index]['tags']
 
 
-def collate_fn(insts):
+def collate_fn(insts, mode_char, mode_word):
     """ Batch preprocess """
-    seq_tokens_batch, tgt_tokens_batch = list(zip(*insts))
 
-    seq_tokens_batch = torch.LongTensor(seq_tokens_batch)
-    tgt_tokens_batch = torch.LongTensor(tgt_tokens_batch)
-    return seq_tokens_batch, tgt_tokens_batch
+    words_batch, chars_batch, tags_batch = list(zip(*insts))
+
+    words_batch = torch.LongTensor(words_batch)
+    chars_batch = torch.LongTensor(chars_batch)
+    tags_batch = torch.LongTensor(tags_batch)
+    return words_batch, chars_batch, tags_batch
 
 
 def get_dataloader(args, word2idx, tag2idx, char2idx):
@@ -61,11 +60,11 @@ def get_dataloader(args, word2idx, tag2idx, char2idx):
     valid_data = prepare_dataset(valid_data, word2idx, char2idx, tag2idx, args.is_lowercase)
     test_data = prepare_dataset(test_data, word2idx, char2idx, tag2idx, args.is_lowercase)
 
-    train_loader = DataLoader(CoNLLData(args, train_data), batch_size=args.batch_size,
-                              num_workers=args.num_worker, collate_fn=collate_fn, shuffle=True)
-    valid_loader = DataLoader(CoNLLData(args, valid_data), batch_size=args.batch_size,
-                              num_workers=args.num_worker, collate_fn=collate_fn, shuffle=True)
+    train_loader = DataLoader(CoNLLData(args, train_data), batch_size=args.batch_size, num_workers=args.num_worker,
+                              shuffle=True, collate_fn=lambda x: collate_fn(x, args.mode_char, args.mode_word))
+    valid_loader = DataLoader(CoNLLData(args, valid_data), batch_size=args.batch_size, num_workers=args.num_worker,
+                              shuffle=True, collate_fn=lambda x: collate_fn(x, args.mode_char, args.mode_word))
     test_loader = DataLoader(CoNLLData(args, test_data), batch_size=args.batch_size, num_workers=args.num_worker,
-                             collate_fn=collate_fn, shuffle=True)
+                             shuffle=True, collate_fn=lambda x: collate_fn(x, args.mode_char, args.mode_word))
     return train_loader, valid_loader, test_loader
 
