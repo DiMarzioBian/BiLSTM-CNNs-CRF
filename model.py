@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from utils import init_embedding, init_lstm, init_linear
+
 
 def log_sum_exp(vec):
     """
@@ -23,7 +25,7 @@ def argmax(vec):
 
 
 class BiLSTM_CRF(nn.Module):
-    def __init__(self, args, glove_word, word2idx, tag2idx, char2idx):
+    def __init__(self, args, word2idx, char2idx, tag2idx, glove_word=None):
         """
         Input parameters from args:
 
@@ -36,68 +38,59 @@ class BiLSTM_CRF(nn.Module):
         super(BiLSTM_CRF, self).__init__()
         self.START_TAG = args.START_TAG
         self.STOP_TAG = args.STOP_TAG
-        self.glove_word = glove_word
         self.word2idx = word2idx
-        self.tag2idx = tag2idx
         self.char2idx = char2idx
+        self.tag2idx = tag2idx
         self.n_word = len(word2idx)
-        self.n_tag = len(tag2idx)
         self.n_char = len(char2idx)
+        self.n_tag = len(tag2idx)
 
-        self.dim_word_glove = args.dim_word_glove
-        self.dim_word_emb = args.dim_word_emb  # dimension of word embeddings (int)
+        self.dim_word_emb = args.dim_word_emb
         self.dim_char_emb = args.dim_char_emb
 
         self.dim_lstm_char = args.dim_lstm_hidden
         self.dim_lstm_hidden = args.dim_lstm_hidden  # The hidden dimension of the LSTM layer (int)
-        self.out_channels = args.char_out_dim  # dimension of the character embeddings
+        self.dim_char_out = args.dim_char_out  # dimension of the character embeddings
 
         self.mode_char = args.mode_char
         self.mode_word = args.mode_word
-        self.use_crf = args.use_crf  # parameter which decides if you want to use the CRF layer for output decoding
-        self.mode_char = args.mode_char
 
-        # model architecture
-        self.embedding_word = nn.Embedding(self.n_word, self.dim_word_emb)
+        # embedding layer
+        self.embedding_char = nn.Embedding(self.n_char+1, self.dim_char_emb, padding_idx=self.n_char)
+        init_embedding(self.embedding_char)
 
-        if self.dim_char_emb is not None:
-            self.embedding_char = nn.Embedding(len(char2idx), self.dim_char_emb)
-
-            # Performing LSTM encoding on the character embeddings
-            if self.mode_char == 'LSTM':
-                self.char_lstm = nn.LSTM(self.dim_char_emb, self.dim_lstm_char, num_layers=1, bidirectional=True)
-
-            # Performing CNN encoding on the character embeddings
-            if self.mode_char == 'CNN':
-                self.char_cnn3 = nn.Conv2d(in_channels=1, out_channels=self.out_channels,
-                                           kernel_size=(3, self.char_emb_dim), padding=(2, 0))
-
-        if self.dim_word_glove is not None:
-            # Initializes the word embeddings with pretrained word embeddings
-            self.dim_word_glove = True
-            self.word_embeds.weight = nn.Parameter(torch.FloatTensor(self.dim_word_glove))
+        if args.enable_pretrained:
+            self.embedding_word = nn.Embedding.from_pretrained(torch.FloatTensor(glove_word), freeze=args.freeze_glove)
         else:
-            self.dim_word_glove = False
+            self.embedding_word = nn.Embedding(self.n_word, self.dim_word_emb)
+            init_embedding(self.embedding_word)
 
-        self.dropout = nn.Dropout(self.dropout)
+        # character encoder
+        if self.mode_char == 'lstm':
+            self.lstm_char = nn.LSTM(self.dim_char_emb, self.dim_lstm_char, num_layers=1, bidirectional=True)
+            init_lstm(self.lstm_char)
+        elif self.mode_char == 'cnn':
+            self.cnn_char = nn.Conv2d(in_channels=1, out_channels=self.dim_char_out,
+                                      kernel_size=(3, self.dim_char_emb), padding=(2, 0))
+            init_linear(self.cnn_char)
+        else:
+            raise Exception('Character encoder mode unknown...')
+        self.dropout = nn.Dropout(args.dropout)
 
-        # Lstm Layer
-        if self.char_mode == 'LSTM':
-            self.lstm = nn.LSTM(self.emb_dim + self.dim_lstm_char * 2, self.dim_lstm_hidden, bidirectional=True)
-        if self.char_mode == 'CNN':
-            self.lstm = nn.LSTM(self.emb_dim + self.out_channels, self.dim_lstm_hidden, bidirectional=True)
+        # word encoder
+        if self.mode_word == 'lstm':
+            self.lstm = nn.LSTM(self.dim_word_emb + self.dim_lstm_char * 2, self.dim_lstm_hidden, bidirectional=True)
+        elif self.mode_word == 'cnn':
+            self.lstm = nn.LSTM(self.dim_word_emb + self.dim_char_out, self.dim_lstm_hidden, bidirectional=True)
+        else:
+            raise Exception('Word encoder mode '+self.mode_char+'unknown...')
+        init_lstm(self.lstm)
 
-        # Linear layer which maps the output of the bidirectional LSTM into tag space.
-        self.hidden2tag = nn.Linear(self.dim_lstm_hidden * 2, self.size_tag)
-
-        if self.use_crf:
-            # Matrix of transition parameters.  Entry i,j is the score of transitioning *to* i *from* j.
-            # Matrix has a dimension of (total number of tags * total number of tags)
-            self.transitions = nn.Parameter(
-                torch.zeros(self.size_tag, self.size_tag))
-
-            # These two statements enforce the constraint that we never transfer
-            # to the start tag and we never transfer from the stop tag
+        # predictor
+        self.hidden2tag = nn.Linear(self.dim_lstm_hidden * 2, self.n_tag)
+        init_linear(self.hidden2tag)
+        if args.enable_crf:
+            self.transitions = nn.Parameter(torch.zeros(self.n_tag, self.n_tag))
             self.transitions.data[self.tag2idx[self.START_TAG], :] = -10000
             self.transitions.data[:, self.tag2idx[self.STOP_TAG]] = -10000
 
@@ -116,8 +109,7 @@ class BiLSTM_CRF(nn.Module):
 
             chars_embeds_temp = torch.FloatTensor(torch.zeros((outputs.size(0), outputs.size(2))), requires_grad=True)
 
-            if self.use_gpu:
-                chars_embeds_temp = chars_embeds_temp.cuda()
+            chars_embeds_temp.to(sentence.device)
 
             for i, index in enumerate(output_lengths):
                 chars_embeds_temp[i] = torch.cat(
@@ -129,16 +121,13 @@ class BiLSTM_CRF(nn.Module):
                 chars_embeds[d[i]] = chars_embeds_temp[i]
 
         elif self.mode_char == 'cnn':
-            chars_embeds = self.char_embeds(chars2).unsqueeze(1)
+            chars_embeds = self.char_embeds(chars2)
 
             # Creating Character level representation using Convolutional Neural Netowrk
             # followed by a max pooling Layer
             chars_cnn_out3 = self.char_cnn3(chars_embeds)
-            chars_embeds = nn.functional.max_pool2d(chars_cnn_out3,
-                                                    kernel_size=(chars_cnn_out3.size(2), 1)).view(
-                chars_cnn_out3.size(0),
-                self.out_channels)
-
+            chars_embeds = nn.functional.max_pool2d(chars_cnn_out3, kernel_size=(chars_cnn_out3.size(2), 1)).view(
+                chars_cnn_out3.size(0), self.dim_char_out)
         else:
             raise Exception('Unknown character model...')
 
@@ -154,19 +143,18 @@ class BiLSTM_CRF(nn.Module):
 
         return lstm_feats
 
-    def forward(self, sentence, chars, chars2_length, d):
-        # Get the emission scores from the BiLSTM
-        feats = self.get_lstm_features(sentence, chars, chars2_length, d)
-        # viterbi to get tag_seq
+    def forward(self, sentence, tags, chars2, chars2_length, d):
+        # sentence, tags is a list of ints
+        # features is a 2D tensor, len(sentence) * self.n_tag
+        feats = self.get_lstm_features(sentence, chars2, chars2_length, d)
 
-        # Find the best path, given the features.
         if self.use_crf:
-            score, tag_seq = self.viterbi_decode(feats)
+            forward_score = self._forward_alg(feats)
+            gold_score = self._score_sentence(feats, tags)
+            return forward_score - gold_score
         else:
-            score, tag_seq = torch.max(feats, 1)
-            tag_seq = list(tag_seq.cpu().data)
-
-        return score, tag_seq
+            scores = nn.functional.cross_entropy(feats, tags)
+            return scores
 
     def forward_alg(self, feats):
         """
@@ -276,7 +264,7 @@ class BiLSTM_CRF(nn.Module):
         feats = self._get_lstm_features(sentence, chars2, chars2_length, d)
 
         if self.use_crf:
-            forward_score = self._forward_alg(feats)
+            forward_score = self.forward_alg(feats)
             gold_score = self._score_sentence(feats, tags)
             return forward_score - gold_score
         else:

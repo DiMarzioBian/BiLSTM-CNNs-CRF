@@ -2,15 +2,13 @@ from tqdm import tqdm
 import math
 import time
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 
 def train(args, model, data, optimizer):
     model.train()
     total_loss = 0.
     total_sample = 0
-    total_hit = 0
+    total_f1 = 0
     start_time = time.time()
 
     for batch in tqdm(data, desc='  - training', leave=False):
@@ -30,22 +28,22 @@ def train(args, model, data, optimizer):
 
         total_loss += loss.item() * len_batch
         hit = torch.eq(gt_batch, output_batch.max(-1).indices).sum().item() / len_batch
-        total_hit += hit
+        total_f1 += total_f1
 
     time_elapse = (time.time() - start_time)
     mean_loss = total_loss / total_sample
-    acc = total_hit / total_sample
-    print('  | Train | loss {:5.4f} | ppl {:8.2f} | acc {:5.4f} | {:5.2f} s | '
-          .format(mean_loss, math.exp(mean_loss), acc, time_elapse))
+    f1 = total_f1 / total_sample
+    print('  | Train | loss {:5.4f} | F1 {:5.4f} | {:5.2f} s |'
+          .format(mean_loss, f1, time_elapse))
 
-    return mean_loss, acc
+    return mean_loss, f1
 
 
-def evaluate(args, model, data, es_patience=0, mode='Valid'):
+def evaluate(args, model, data, es_patience=0, mode='valid'):
     model.eval()
     total_loss = 0.
     total_sample = 0
-    total_hit = 0
+    total_f1 = 0
 
     with torch.no_grad():
         for batch in tqdm(data, desc='  - evaluating', leave=False):
@@ -59,15 +57,15 @@ def evaluate(args, model, data, es_patience=0, mode='Valid'):
 
             total_loss += loss.item() * len_batch
             hit = torch.eq(gt_batch, output_batch.max(-1).indices).sum().item() / len_batch
-            total_hit += hit
+            total_f1 += hit
 
         mean_loss = total_loss / total_sample
-        acc = total_hit / total_sample
-        if mode == 'Valid':
-            print('  | {} | loss {:5.4f} | ppl {:8.2f} | acc {:5.4f} | es_patience {:.0f} |'
-                  .format(mode, mean_loss, math.exp(mean_loss), acc, es_patience))
+        f1 = total_f1 / total_sample
+        if mode == 'valid':
+            print('  | Valid | loss {:5.4f} | F1 {:5.4f} | es_patience {:.0f} |'
+                  .format(mean_loss, f1, es_patience))
         else:
-            print('  | {} | loss {:5.4f} | ppl {:8.2f} | acc {:5.4f} |'
-                  .format(mode, mean_loss, math.exp(mean_loss), acc))
+            print('  | Test | loss {:5.4f} | F1 {:5.4f} |'
+                  .format(mean_loss, f1))
 
-    return mean_loss, acc
+    return mean_loss, f1
