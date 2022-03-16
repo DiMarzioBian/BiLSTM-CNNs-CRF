@@ -36,11 +36,11 @@ def main():
                         help='Max early stopped patience')
 
     # dimension setting
-    parser.add_argument('--dim_word_emb', type=int, default=100,
+    parser.add_argument('--dim_emb_word', type=int, default=100,
                         help='word embedding dimension')
-    parser.add_argument('--dim_char_emb', type=int, default=25,
+    parser.add_argument('--dim_emb_char', type=int, default=25,
                         help='char embedding dimension')
-    parser.add_argument('--dim_char_out', type=int, default=25,
+    parser.add_argument('--dim_out_char', type=int, default=25,
                         help='output dimension from the CNN encoder for character')
     parser.add_argument('--dim_lstm_hidden', type=int, default=50,
                         help='lstm hidden state dimension')

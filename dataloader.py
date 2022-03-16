@@ -1,7 +1,7 @@
 import codecs
 import torch
 from torch.utils.data import Dataset, DataLoader
-from torch.nn.utils.rnn import pack_sequence, pack_padded_sequence, pad_sequence
+from torch.nn.utils.rnn import pad_sequence
 
 from utils import load_sentences, update_tag_scheme, prepare_dataset
 
@@ -43,11 +43,11 @@ def collate_fn(insts, args):
     tags_batch = pad_sequence(tags_batch, batch_first=True, padding_value=args.idx_pad_tag)
     tags_batch = tags_batch.index_select(0, sorted_indices)
 
-    if args.mode_word == 'lstm':
-        words_batch = pack_padded_sequence(words_batch, sorted_lens, batch_first=True)
-
-    if args.mode_char == 'lstm':
-        chars_batch = pack_padded_sequence(chars_batch, sorted_lens, batch_first=True)
+    # if args.mode_word == 'lstm':
+    #     words_batch = pack_padded_sequence(words_batch, sorted_lens, batch_first=True)
+    #
+    # if args.mode_char == 'lstm':
+    #     chars_batch = pack_padded_sequence(chars_batch, sorted_lens, batch_first=True)
 
     return words_batch, chars_batch, tags_batch, sorted_lens
 
