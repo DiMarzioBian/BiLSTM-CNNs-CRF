@@ -1,25 +1,9 @@
 import codecs
 import torch
 from torch.utils.data import Dataset, DataLoader
-from torch.nn.utils.rnn import pack_sequence, pack_padded_sequence
+from torch.nn.utils.rnn import pack_sequence, pack_padded_sequence, pad_sequence
 
 from utils import load_sentences, update_tag_scheme, prepare_dataset
-
-
-# Dictionary to store all words and their indices
-class Dictionary(object):
-    def __init__(self):
-        self.word2idx = {}
-        self.idx2word = []
-
-    def add_word(self, word):
-        if word not in self.word2idx:
-            self.idx2word.append(word)
-            self.word2idx[word] = len(self.idx2word) - 1
-        return self.word2idx[word]
-
-    def __len__(self):
-        return len(self.idx2word)
 
 
 class CoNLLData(Dataset):
@@ -35,39 +19,49 @@ class CoNLLData(Dataset):
         return self.length
 
     def __getitem__(self, index):
-        char_masked = []
-        lens_char = []
-        for word in self.data[index]['chars']:
-            char_masked.append(word + [self.idx_pad_char] * (self.max_len_word - len(word)))
-            lens_char.append(len(word))
-
+        chars_padded = [x + [self.idx_pad_char]*(self.max_len_word - len(x)) for x in self.data[index]['chars']]
         return \
-            torch.LongTensor(self.data[index]['words']), \
-            torch.LongTensor(char_masked), \
-            torch.LongTensor(lens_char), \
+            torch.LongTensor(self.data[index]['words']), torch.LongTensor(chars_padded), \
             torch.LongTensor(self.data[index]['tags'])
 
 
 def collate_fn(insts, args):
     """ Batch preprocess """
-    words_batch, chars_batch, lens_char_batch, tags_batch = list(zip(*insts))
+    words_batch, chars_batch, tags_batch = list(zip(*insts))
+
+    # get sorted indices
+    lens = torch.as_tensor([v.size(0) for v in words_batch])
+    sorted_lens, sorted_indices = torch.sort(lens, descending=True)
+
+    # sort data
+    words_batch = pad_sequence(words_batch, batch_first=True, padding_value=args.idx_pad_word)
+    words_batch = words_batch.index_select(0, sorted_indices)
+
+    chars_batch = pad_sequence(chars_batch, batch_first=True, padding_value=args.idx_pad_char)
+    chars_batch = chars_batch.index_select(0, sorted_indices)
+
+    tags_batch = pad_sequence(tags_batch, batch_first=True, padding_value=args.idx_pad_tag)
+    tags_batch = tags_batch.index_select(0, sorted_indices)
 
     if args.mode_word == 'lstm':
-        words_pack = pack_sequence(words_batch, enforce_sorted=False)
-    elif args.mode_word == 'cnn':
-        words_pack = torch.stack(words_batch, dim=1)
+        words_batch = pack_padded_sequence(words_batch, sorted_lens, batch_first=True)
 
     if args.mode_char == 'lstm':
-        chars_pack = pack_sequence(chars_batch, enforce_sorted=False)
-    elif args.mode_char == 'cnn':
-        chars_pack = torch.stack(chars_batch, dim=1)
+        chars_batch = pack_padded_sequence(chars_batch, sorted_lens, batch_first=True)
 
-    tags_batch = torch.LongTensor(tags_batch)
-    return words_pack, chars_pack, tags_batch
+    return words_batch, chars_batch, tags_batch, sorted_lens
+
+
+def rearrange(data: torch.tensor,
+              new_idx: torch.tensor):
+    new_data = data.clone()
+    for i, (idx, sample) in enumerate(zip(new_idx, data)):
+        new_data[idx] = data[i]
+    return new_data
 
 
 def get_dataloader(args, word2idx, tag2idx, char2idx):
-    """ Get dataloader and dictionary """
+    """ Get dataloader """
     train_data = load_sentences(args.path_data+'eng.train', args.digi_zero)
     valid_data = load_sentences(args.path_data+'eng.testa', args.digi_zero)
     test_data = load_sentences(args.path_data+'eng.testb', args.digi_zero)

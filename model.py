@@ -45,6 +45,9 @@ class BiLSTM_CRF(nn.Module):
         self.n_char = len(char2idx)
         self.n_tag = len(tag2idx)
 
+        self.idx_pad_char = args.idx_pad_char
+        self.idx_pad_word = args.idx_pad_word
+
         self.dim_word_emb = args.dim_word_emb
         self.dim_char_emb = args.dim_char_emb
 
@@ -56,14 +59,15 @@ class BiLSTM_CRF(nn.Module):
         self.mode_word = args.mode_word
 
         # embedding layer
-        self.embedding_char = nn.Embedding(self.n_char+1, self.dim_char_emb, padding_idx=self.n_char)
+        self.embedding_char = nn.Embedding(self.n_char+1, self.dim_char_emb, padding_idx=self.idx_pad_char)
         init_embedding(self.embedding_char)
 
         if args.enable_pretrained:
             self.embedding_word = nn.Embedding.from_pretrained(torch.FloatTensor(glove_word), freeze=args.freeze_glove)
+            self.embedding_word.padding_idx = self.idx_pad_word  # set pad word index
         else:
-            self.embedding_word = nn.Embedding(self.n_word, self.dim_word_emb)
-            init_embedding(self.embedding_word)
+            self.embedding_word = nn.Embedding(self.n_word+1, self.dim_word_emb)
+        init_embedding(self.embedding_word)
 
         # character encoder
         if self.mode_char == 'lstm':

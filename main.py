@@ -2,6 +2,7 @@ import argparse
 import os
 import pickle
 import math
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.onnx
@@ -27,20 +28,20 @@ def main():
                         help='number of dataloader worker')
     parser.add_argument('--initial_preprocess', type=bool, default=False,
                         help='use initial data preprocess strategy')
-    parser.add_argument('--batch_size', type=int, default=16, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=8, metavar='N',
                         help='batch size')
-    parser.add_argument('--epochs', type=int, default=200,
+    parser.add_argument('--epochs', type=int, default=30,
                         help='upper epoch limit')
     parser.add_argument('--es_patience_max', type=int, default=10,
                         help='Max early stopped patience')
 
     # dimension setting
+    parser.add_argument('--dim_word_emb', type=int, default=100,
+                        help='word embedding dimension')
     parser.add_argument('--dim_char_emb', type=int, default=25,
                         help='char embedding dimension')
     parser.add_argument('--dim_char_out', type=int, default=25,
                         help='output dimension from the CNN encoder for character')
-    parser.add_argument('--dim_word_emb', type=int, default=25,
-                        help='word embedding dimension')
     parser.add_argument('--dim_lstm_hidden', type=int, default=50,
                         help='lstm hidden state dimension')
     parser.add_argument('--dim_lstm_char', type=int, default=25,
@@ -102,9 +103,12 @@ def main():
     tag2idx = mappings['tag2idx']
     args.max_len_word = max([len(s) for s in word2idx.keys()])
     args.idx_pad_char = max(char2idx.values()) + 1
+    args.idx_pad_word = max(word2idx.values()) + 1
+    args.idx_pad_tag = max(tag2idx.values()) + 1
 
     if args.enable_pretrained:
         glove_word = mappings['embeds_word']
+        glove_word = np.append(glove_word, [[0]*args.dim_word_emb], axis=0)
     else:
         glove_word = None
 

@@ -14,7 +14,7 @@ def train(args, model, data, optimizer):
     for batch in tqdm(data, desc='  - training', leave=False):
         len_batch = batch[0].shape[0]
         total_sample += len_batch
-        seq_batch, gt_batch = map(lambda x: x.to(args.device), batch)
+        words_batch, chars_batch, tags_batch, lens_batch = map(lambda x: x.to(args.device), batch)
         model.zero_grad()
 
         output_batch = model(seq_batch)
