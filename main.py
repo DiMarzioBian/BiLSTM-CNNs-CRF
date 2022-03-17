@@ -36,16 +36,14 @@ def main():
                         help='Max early stopped patience')
 
     # dimension setting
+    parser.add_argument('--dim_emb_char', type=int, default=25,
+                        help='character embedding dimension')
     parser.add_argument('--dim_emb_word', type=int, default=100,
                         help='word embedding dimension')
-    parser.add_argument('--dim_emb_char', type=int, default=25,
-                        help='char embedding dimension')
     parser.add_argument('--dim_out_char', type=int, default=25,
-                        help='output dimension from the CNN encoder for character')
-    parser.add_argument('--dim_lstm_hidden', type=int, default=50,
-                        help='lstm hidden state dimension')
-    parser.add_argument('--dim_lstm_char', type=int, default=25,
-                        help='character encoder lstm dimension')
+                        help='character encoder output dimension')
+    parser.add_argument('--dim_out_word', type=int, default=50,
+                        help='word encoder output dimension')
 
     # general settings
     parser.add_argument('--enable_pretrained', type=bool, default=True,
@@ -74,16 +72,14 @@ def main():
                         help='control replacement of  all digits by 0')
     parser.add_argument('--tag_scheme', type=str, default='BIOES',
                         help='BIO or BIOES')
-    parser.add_argument('--mode_char', type=str, default='lstm',
+    parser.add_argument('--mode_char', type=str, default='cnn',
                         help='character encoder: lstm or cnn')
     parser.add_argument('--mode_word', type=str, default='lstm',
-                        help='word encoder: lstm or cnn')
+                        help='word encoder: lstm or cnn1, cnn2, cnn3, cnn_d')
+    parser.add_argument('--n_cnn_layer', type=int, default=1,
+                        help='number of layer of CNN, 1, 2 or 3')
     parser.add_argument('--enable_crf', type=bool, default=True,
                         help='employ CRF')
-    parser.add_argument('--n_cnn', type=int, default=3,
-                        help='number of layer of CNN')
-    parser.add_argument('--dilated', type=bool, default=False,
-                        help='employ dilated CNN')
 
     args = parser.parse_args()
     args.device = torch.device(args.device)
@@ -108,7 +104,7 @@ def main():
 
     if args.enable_pretrained:
         glove_word = mappings['embeds_word']
-        glove_word = np.append(glove_word, [[0]*args.dim_word_emb], axis=0)
+        glove_word = np.append(glove_word, [[0]*args.dim_emb_word], axis=0)
     else:
         glove_word = None
 
@@ -122,9 +118,8 @@ def main():
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_step, gamma=args.lr_gamma)
 
     # Start modeling
-    print('[info] | char: {mode_char} | word: {mode_word} | CRF: {crf} | N_CNN: {n_cnn} | Dilated: {dilated} |'
-          .format(mode_char=args.mode_char, mode_word=args.mode_word, crf=args.enable_crf, n_cnn=args.n_cnn,
-                  dilated=args.dilated))
+    print('[info] | char: {mode_char} | word: {mode_word} | CRF: {crf} |'
+          .format(mode_char=args.mode_char, mode_word=args.mode_word, crf=args.enable_crf))
     best_val_loss = 1e5
     best_f1 = 0
     best_epoch = 0
@@ -161,9 +156,8 @@ def main():
     with open(args.save, 'rb') as f:
         model = torch.load(f)
     test_loss, test_acc = evaluate(args, model, test_loader, es_patience, mode='test')
-    print('[info] | char: {mode_char} | word: {mode_word} | CRF: {crf} | N_CNN: {n_cnn} | Dilated: {dilated} |'
-          .format(mode_char=args.mode_char, mode_word=args.mode_word, crf=args.enable_crf, n_cnn=args.n_cnn,
-                  dilated=args.dilated))
+    print('[info] | char: {mode_char} | word: {mode_word} | CRF: {crf} |'
+          .format(mode_char=args.mode_char, mode_word=args.mode_word, crf=args.enable_crf))
 
 
 if __name__ == '__main__':
