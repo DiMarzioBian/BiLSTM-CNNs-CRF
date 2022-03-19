@@ -21,6 +21,8 @@ def main():
                         help='path of the data corpus')
     parser.add_argument('--path_processed', type=str, default='./data/data_bundle.pkl',
                         help='path of the processed data information')
+    parser.add_argument('--path_filtered', type=str, default='./data/data_filtered_bundle.pkl',
+                        help='path to save the filtered processed data')
     parser.add_argument('--path_pretrained', type=str, default='./data/trained-model-cpu',
                         help='path of the data corpus')
     parser.add_argument('--path_model', type=str, default='./result/models/model.pt',
@@ -65,10 +67,12 @@ def main():
     # NLP related settings
     parser.add_argument('--mode_char', type=str, default='lstm',
                         help='character encoder: lstm or cnn')
-    parser.add_argument('--mode_word', type=str, default='cnn3',
+    parser.add_argument('--mode_word', type=str, default='cnn2',
                         help='word encoder: lstm or cnn1, cnn2, cnn3, cnn_d')
-    parser.add_argument('--enable_crf', type=bool, default=True,
+    parser.add_argument('--enable_crf', type=bool, default=False,
                         help='employ CRF')
+    parser.add_argument('--filter_word', type=bool, default=True,
+                        help='filter meaningless words')
 
     args = parser.parse_args()
     args.device = torch.device(args.device)
@@ -82,9 +86,15 @@ def main():
     print('\n[info] Load dataset and other resources...')
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
+
     # get data and prepare model, optimizer and scheduler
-    with open(args.path_processed, 'rb') as f:
-        mappings = pickle.load(f)
+    if not args.filter_word:
+        with open(args.path_processed, 'rb') as f:
+            mappings = pickle.load(f)
+    else:
+        with open(args.path_filtered, 'rb') as f:
+            mappings = pickle.load(f)
+
     word2idx = mappings['word2idx']
     char2idx = mappings['char2idx']
     tag2idx = mappings['tag2idx']

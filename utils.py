@@ -5,9 +5,11 @@ import torch
 import torch.nn as nn
 
 special_word = [
+    '------------------------------------------------------------',
+    '-------------------------------------------------------------',
     '--------------------------------',
-    'company-------------price---broker----------------',
-    'day--company----period--consensus----range-------pvs'
+    'Company-------------Price---Broker----------------',
+    'DAY--COMPANY----PERIOD--CONSENSUS----RANGE-------PVS',
 ]
 
 
@@ -18,7 +20,7 @@ def num_to_zero(s):
     return re.sub(r'\d', r'0', s)
 
 
-def load_sentences(path, zeros):
+def load_sentences(path, zeros, filter_word=False):
     """
     Load sentences.
     A line must contain at least a word and its tag.
@@ -28,6 +30,7 @@ def load_sentences(path, zeros):
     sentence = []
     for line in codecs.open(path, 'r', 'utf8'):
         line = num_to_zero(line.rstrip()) if zeros else line.rstrip()  # delete tail character
+
         if not line:
             if len(sentence) > 0:
                 if 'DOCSTART' not in sentence[0][0]:
@@ -35,8 +38,12 @@ def load_sentences(path, zeros):
                 sentence = []
         else:
             word = line.split()
+            if filter_word:
+                if word[0] in special_word:
+                    continue
             assert len(word) >= 2
             sentence.append(word)
+
     if len(sentence) > 0:
         if 'DOCSTART' not in sentence[0][0]:
             sentences.append(sentence)

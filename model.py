@@ -1,9 +1,8 @@
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-
+from tqdm import tqdm
 from utils import init_embedding, init_lstm, init_linear
 
 
@@ -213,11 +212,11 @@ class BiLSTM_CRF(nn.Module):
         elif self.mode_word in ['cnn3', 'cnn_d']:
             out_cnn_word = self.conv1(emb_words_chars.view(len_batch * len_sent, 1, 1,
                                                            self.dim_emb_word + self.dim_out_char * 2))
-            out_cnn_word = self.mp1(out_cnn_word)
+            # out_cnn_word = self.mp1(out_cnn_word)
             out_cnn_word = self.conv2(out_cnn_word)
-            out_cnn_word = self.mp2(out_cnn_word)
+            # out_cnn_word = self.mp2(out_cnn_word)
             out_cnn_word = self.conv3(out_cnn_word)
-            enc_word = self.mp3(out_cnn_word)
+            # enc_word = self.mp3(out_cnn_word)
             x = 1
 
         else:
@@ -243,7 +242,7 @@ class BiLSTM_CRF(nn.Module):
                 score, pred = self.viterbi_decode(feats)
                 loss_batch.append(forward_score - gold_score)
                 pred_batch.append(pred)
-
+            x = 1
             return torch.stack(loss_batch).sum() / lens_batch.sum(), pred_batch
         else:
             loss = F.cross_entropy(feats_batch.view(-1, self.n_tag), tags_batch.view(-1), ignore_index=self.idx_pad_tag)

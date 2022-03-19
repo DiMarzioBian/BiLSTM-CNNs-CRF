@@ -8,18 +8,20 @@ def train(args, model, data, optimizer):
     n_sample = 0
     loss_total = 0.
     pred_all, gt_all = [], []  # to calculate f1 score
+    ss = []
 
     for batch in tqdm(data, desc='  - training', leave=False):
         words_batch, chars_batch, tags_batch, lens_batch = map(lambda x: x.to(args.device), batch)
-        model.zero_grad()
 
+        optimizer.zero_grad()
         loss_batch, pred_batch = model.get_loss(words_batch, chars_batch, tags_batch, lens_batch)
         loss_batch.backward()
         optimizer.step()
+        ss.append(loss_batch.cpu().tolist())
 
         # calculate loss and f1
         n_sample += lens_batch.sum()
-        loss_total = loss_batch * lens_batch.sum()
+        loss_total += loss_batch * lens_batch.sum()
         for pred, tags, _len in zip(pred_batch, tags_batch, lens_batch):
             gt_all += tags[:_len].cpu().tolist()
             pred_all += pred[:_len]
@@ -45,7 +47,7 @@ def evaluate(args, model, data):
 
             # calculate loss and f1
             n_sample += lens_batch.sum()
-            loss_total = loss_batch * lens_batch.sum()
+            loss_total += loss_batch * lens_batch.sum()
             for pred, tags, _len in zip(pred_batch, tags_batch, lens_batch):
                 gt_all += tags[:_len].cpu().tolist()
                 pred_all += pred[:_len]

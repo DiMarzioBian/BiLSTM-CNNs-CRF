@@ -13,16 +13,20 @@ def main():
     parser = argparse.ArgumentParser(description='BiLSTM-CNNs-CRF project')
     parser.add_argument('--seed', type=int, default=1111,
                         help='random seed')
+    parser.add_argument('--word_dim', type=int, default=100,
+                        help='token embedding dimension')
     parser.add_argument('--path_data', type=str, default='./data/raw/',
                         help='location of the data corpus')
     parser.add_argument('--path_embedding', type=str, default='./data/raw/glove.6B.100d.txt',
                         help='path to save embedding file')
     parser.add_argument('--path_processed', type=str, default='./data/data_bundle.pkl',
                         help='path to save the processed data')
-    parser.add_argument('--word_dim', type=int, default=100,
-                        help='token embedding dimension')
+    parser.add_argument('--path_filtered', type=str, default='./data/data_filtered_bundle.pkl',
+                        help='path to save the filtered processed data')
 
     # settings
+    parser.add_argument('--filter_word', type=bool, default=True,
+                        help='filter meaningless words')
     parser.add_argument('--tag_scheme', type=str, default='BIOES',
                         help='BIO or BIOES')
     parser.add_argument('--is_lowercase', type=bool, default=True,
@@ -33,9 +37,9 @@ def main():
 
     # preprocess
     print('\n[info] Data preprocess starts...')
-    train_sentences = load_sentences(args.path_data + 'eng.train', args.digi_zero)
-    valid_sentences = load_sentences(args.path_data + 'eng.testa', args.digi_zero)
-    test_sentences = load_sentences(args.path_data + 'eng.testb', args.digi_zero)
+    train_sentences = load_sentences(args.path_data + 'eng.train', args.digi_zero, filter_word=args.filter_word)
+    valid_sentences = load_sentences(args.path_data + 'eng.testa', args.digi_zero, filter_word=args.filter_word)
+    test_sentences = load_sentences(args.path_data + 'eng.testb', args.digi_zero, filter_word=args.filter_word)
 
     update_tag_scheme(train_sentences, args.tag_scheme)
     update_tag_scheme(valid_sentences, args.tag_scheme)
@@ -69,15 +73,26 @@ def main():
 
     # save pickle file
     print('\n[info] Saving files...')
-    with open(args.path_processed, 'wb') as f:
-        mappings = {
-            'word2idx': word2idx,
-            'char2idx': char2idx,
-            'tag2idx': tag2idx,
-            'embeds_word': embeds_word
-        }
-        pickle.dump(mappings, f)
-    print('\n[info] Preprocess finished.')
+    if not args.filter_word:
+        with open(args.path_processed, 'wb') as f:
+            mappings = {
+                'word2idx': word2idx,
+                'char2idx': char2idx,
+                'tag2idx': tag2idx,
+                'embeds_word': embeds_word
+            }
+            pickle.dump(mappings, f)
+        print('\n[info] Preprocess finished.')
+    else:
+        with open(args.path_filtered, 'wb') as f:
+            mappings = {
+                'word2idx': word2idx,
+                'char2idx': char2idx,
+                'tag2idx': tag2idx,
+                'embeds_word': embeds_word
+            }
+            pickle.dump(mappings, f)
+        print('\n[info] Preprocess & filtering finished.')
 
 
 def create_dico(item_list):
@@ -110,7 +125,9 @@ def word_mapping(sentences, lower):
     """
     Create a dictionary and a mapping of words, sorted by frequency.
     """
-    words = [[x[0].lower() if lower else x[0] for x in s] for s in sentences]
+    words = []
+    for s in sentences:
+        words.append([x[0].lower() if lower else x[0] for x in s])
     dico = create_dico(words)
     dico['<UNK>'] = 10000000  # UNK tag for unknown words
     word2idx, idx2word = create_mapping(dico)

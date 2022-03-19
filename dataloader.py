@@ -47,9 +47,9 @@ def collate_fn(insts, args):
 
 def get_dataloader(args, word2idx, tag2idx, char2idx):
     """ Get dataloader """
-    train_data = load_sentences(args.path_data+'eng.train', args.digi_zero)
-    valid_data = load_sentences(args.path_data+'eng.testa', args.digi_zero)
-    test_data = load_sentences(args.path_data+'eng.testb', args.digi_zero)
+    train_data = load_sentences(args.path_data+'eng.train', args.digi_zero, filter_word=args.filter_word)
+    valid_data = load_sentences(args.path_data+'eng.testa', args.digi_zero, filter_word=args.filter_word)
+    test_data = load_sentences(args.path_data+'eng.testb', args.digi_zero, filter_word=args.filter_word)
 
     update_tag_scheme(train_data, args.tag_scheme)
     update_tag_scheme(valid_data, args.tag_scheme)
