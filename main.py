@@ -24,13 +24,15 @@ def main():
                         help='path of the processed data information')
     parser.add_argument('--path_pretrained', type=str, default='./data/trained-model-cpu',
                         help='path of the data corpus')
-    parser.add_argument('--num_worker', type=int, default=0,
+    parser.add_argument('--path_model', type=str, default='./result/models/model.pt',
+                        help='path of the data corpus')
+    parser.add_argument('--num_worker', type=int, default=5,
                         help='number of dataloader worker')
     parser.add_argument('--initial_preprocess', type=bool, default=False,
                         help='use initial data preprocess strategy')
     parser.add_argument('--batch_size', type=int, default=8, metavar='N',
                         help='batch size')
-    parser.add_argument('--epochs', type=int, default=30,
+    parser.add_argument('--epochs', type=int, default=200,
                         help='upper epoch limit')
     parser.add_argument('--es_patience_max', type=int, default=10,
                         help='Max early stopped patience')
@@ -116,7 +118,7 @@ def main():
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_step, gamma=args.lr_gamma)
 
     # Start modeling
-    print('[info] | char: {mode_char} | word: {mode_word} | CRF: {crf} |'
+    print('     | char: {mode_char} | word: {mode_word} | CRF: {crf} |'
           .format(mode_char=args.mode_char, mode_word=args.mode_word, crf=args.enable_crf))
     best_val_loss = 1e5
     best_f1 = 0
@@ -133,7 +135,7 @@ def main():
 
         # Save the model if the validation loss is the best we've seen so far.
         if val_f1 > best_f1:
-            with open(args.save, 'wb') as f:
+            with open(args.path_model, 'wb') as f:
                 torch.save(model, f)
             best_val_loss = val_loss
             best_f1 = val_f1
@@ -151,9 +153,9 @@ def main():
 
     # Load the best saved model and test
     print('\n[Testing]')
-    with open(args.save, 'rb') as f:
+    with open(args.path_model, 'rb') as f:
         model = torch.load(f)
-    test_loss, test_acc = evaluate(args, model, test_loader, es_patience, mode='test')
+    evaluate(args, model, test_loader, es_patience, mode='test')
     print('[info] | char: {mode_char} | word: {mode_word} | CRF: {crf} |'
           .format(mode_char=args.mode_char, mode_word=args.mode_word, crf=args.enable_crf))
 

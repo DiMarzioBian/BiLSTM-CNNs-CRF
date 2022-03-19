@@ -9,8 +9,8 @@ def train(args, model, data, optimizer):
     model.train()
     n_sample = 0
     loss_total = 0.
-    total_f1 = 0
     start_time = time.time()
+    pred_all, gt_all = [], []  # to calculate f1 score
 
     for batch in tqdm(data, desc='  - training', leave=False):
         len_batch = batch[-1].shape[0]
@@ -23,15 +23,13 @@ def train(args, model, data, optimizer):
         optimizer.step()
 
         # calculate loss and f1
-        mask_batch = (tags_batch != 19)
-        loss_total += loss_batch.item() * mask_batch.sum()
+        for pred, tags, _len in zip(pred_batch, tags_batch, lens_batch):
+            gt_all += tags[:_len].tolist()
+            pred_all += pred[:_len]
 
-        f1 = torch.eq(gt_batch, output_batch.max(-1).indices).sum().item() / len_batch
-        total_f1 += f1
-
+    f1 = f1_score(gt_all, pred_all, average='macro')
     time_elapse = (time.time() - start_time)
     loss_mean = loss_total / n_sample
-    f1 = total_f1 / n_sample
     print('  | Train | loss {:5.4f} | F1 {:5.4f} | {:5.2f} s |'
           .format(loss_mean, f1, time_elapse))
 
@@ -42,7 +40,7 @@ def evaluate(args, model, data, es_patience=0, mode='valid'):
     model.eval()
     n_sample = 0
     loss_total = 0.
-    total_f1 = 0
+    pred_all, gt_all = [], []
 
     with torch.no_grad():
         for batch in tqdm(data, desc='  - evaluating', leave=False):
@@ -53,14 +51,13 @@ def evaluate(args, model, data, es_patience=0, mode='valid'):
 
             loss_batch, pred_batch = model.get_loss(words_batch, chars_batch, tags_batch, lens_batch)
 
-            total_loss += loss_batch.item() * len_batch
-            precision = 1
-            recall = 1
-            f1 = 2 * precision * recall / (precision + recall)
-            total_f1 += f1
+            # calculate loss and f1
+            for pred, tags, _len in zip(pred_batch, tags_batch, lens_batch):
+                gt_all += tags[:_len].tolist()
+                pred_all += pred[:_len]
 
+        f1 = f1_score(gt_all, pred_all, average='macro')
         loss_mean = loss_total / n_sample
-        f1 = total_f1 / n_sample
         if mode == 'valid':
             print('  | Valid | loss {:5.4f} | F1 {:5.4f} | es_patience {:.0f} |'
                   .format(loss_mean, f1, es_patience))
