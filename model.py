@@ -4,8 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
-from utils import init_embedding, init_lstm, init_linear, get_chunks
-from sklearn.metrics import f1_score, precision_score, recall_score
+from utils import init_embedding, init_lstm, init_linear
 
 
 def log_sum_exp(vec):
