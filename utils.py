@@ -1,6 +1,7 @@
 import re
 import codecs
 import numpy as np
+import torch
 import torch.nn as nn
 
 special_word = [
@@ -227,3 +228,4 @@ def init_lstm(input_lstm):
                 bias = eval('input_lstm.bias_hh_l' + str(ind) + '_reverse')
                 bias.data.zero_()
                 bias.data[input_lstm.hidden_size: 2 * input_lstm.hidden_size] = 1
+

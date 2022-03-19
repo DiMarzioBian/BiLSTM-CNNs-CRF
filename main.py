@@ -42,7 +42,7 @@ def main():
                         help='word embedding dimension')
     parser.add_argument('--dim_out_char', type=int, default=25,
                         help='character encoder output dimension')
-    parser.add_argument('--dim_out_word', type=int, default=50,
+    parser.add_argument('--dim_out_word', type=int, default=25,
                         help='word encoder output dimension')
 
     # general settings
@@ -74,10 +74,8 @@ def main():
                         help='BIO or BIOES')
     parser.add_argument('--mode_char', type=str, default='cnn',
                         help='character encoder: lstm or cnn')
-    parser.add_argument('--mode_word', type=str, default='lstm',
+    parser.add_argument('--mode_word', type=str, default='cnn1',
                         help='word encoder: lstm or cnn1, cnn2, cnn3, cnn_d')
-    parser.add_argument('--n_cnn_layer', type=int, default=1,
-                        help='number of layer of CNN, 1, 2 or 3')
     parser.add_argument('--enable_crf', type=bool, default=True,
                         help='employ CRF')
 
