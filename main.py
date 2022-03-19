@@ -30,9 +30,9 @@ def main():
                         help='number of dataloader worker')
     parser.add_argument('--initial_preprocess', type=bool, default=False,
                         help='use initial data preprocess strategy')
-    parser.add_argument('--batch_size', type=int, default=8, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=200, metavar='N',
                         help='batch size')
-    parser.add_argument('--epochs', type=int, default=200,
+    parser.add_argument('--epochs', type=int, default=100,
                         help='upper epoch limit')
     parser.add_argument('--es_patience_max', type=int, default=10,
                         help='Max early stopped patience')
