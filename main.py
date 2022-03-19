@@ -1,7 +1,6 @@
 import argparse
-import os
 import pickle
-import math
+import time
 import numpy as np
 import torch
 import torch.nn as nn
@@ -26,11 +25,9 @@ def main():
                         help='path of the data corpus')
     parser.add_argument('--path_model', type=str, default='./result/models/model.pt',
                         help='path of the data corpus')
-    parser.add_argument('--num_worker', type=int, default=5,
+    parser.add_argument('--num_worker', type=int, default=0,
                         help='number of dataloader worker')
-    parser.add_argument('--initial_preprocess', type=bool, default=False,
-                        help='use initial data preprocess strategy')
-    parser.add_argument('--batch_size', type=int, default=200, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=8, metavar='N',
                         help='batch size')
     parser.add_argument('--epochs', type=int, default=100,
                         help='upper epoch limit')
@@ -46,37 +43,29 @@ def main():
                         help='character encoder output dimension')
     parser.add_argument('--dim_out_word', type=int, default=25,
                         help='word encoder output dimension')
+    parser.add_argument('--window_kernel', type=int, default=5,
+                        help='window width of CNN kernel')
 
     # general settings
     parser.add_argument('--enable_pretrained', type=bool, default=True,
                         help='use pretrained glove dimension')
-    parser.add_argument('--freeze_glove', type=bool, default=True,
+    parser.add_argument('--freeze_glove', type=bool, default=False,
                         help='free pretrained glove embedding')
-    parser.add_argument('--clip_gradient', type=float, default=5.0,
-                        help='gradient clipping threshold')
     parser.add_argument('--dropout', type=float, default=0.5,
                         help='dropout rate applied to layers (0 = no dropout)')
-    parser.add_argument('--optimizer', type=str, default='Adam',
-                        help='Adam, AdamW, RMSprop, Adagrad, SGD & Initial')
-    parser.add_argument('--lr', type=float, default=1e-3,
+    parser.add_argument('--lr', type=float, default=1e-2,
                         help='initial learning rate')
     parser.add_argument('--lr_step', type=int, default=10,
                         help='number of epoch for each lr downgrade')
     parser.add_argument('--lr_gamma', type=float, default=0.1,
                         help='strength of lr downgrade')
-    parser.add_argument('--eps_f1', type=float, default=1e-5,
+    parser.add_argument('--eps_f1', type=float, default=1e-4,
                         help='minimum f1 score difference threshold')
 
     # NLP related settings
-    parser.add_argument('--is_lowercase', type=bool, default=True,
-                        help='use lowercase of words')
-    parser.add_argument('--digi_zero', type=bool, default=True,
-                        help='control replacement of  all digits by 0')
-    parser.add_argument('--tag_scheme', type=str, default='BIOES',
-                        help='BIO or BIOES')
-    parser.add_argument('--mode_char', type=str, default='cnn',
+    parser.add_argument('--mode_char', type=str, default='lstm',
                         help='character encoder: lstm or cnn')
-    parser.add_argument('--mode_word', type=str, default='cnn1',
+    parser.add_argument('--mode_word', type=str, default='cnn3',
                         help='word encoder: lstm or cnn1, cnn2, cnn3, cnn_d')
     parser.add_argument('--enable_crf', type=bool, default=True,
                         help='employ CRF')
@@ -85,13 +74,15 @@ def main():
     args.device = torch.device(args.device)
     args.START_TAG = '<START>'
     args.STOP_TAG = '<STOP>'
-    print('\n[info] Project starts...')
+    args.is_lowercase = True  # use lowercase of words
+    args.digi_zero = True  # control replacement of  all digits by 0
+    args.tag_scheme = 'BIOES'  # BIO or BIOES
 
+    print('\n[info] Project starts...')
+    print('\n[info] Load dataset and other resources...')
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
-
     # get data and prepare model, optimizer and scheduler
-    print('\n[info] Load dataset and other resources...')
     with open(args.path_processed, 'rb') as f:
         mappings = pickle.load(f)
     word2idx = mappings['word2idx']
@@ -128,20 +119,21 @@ def main():
     for epoch in range(1, args.epochs+1):
         print('\n[Epoch {epoch}]'.format(epoch=epoch))
 
-        train(args, model, train_loader, optimizer)
-        if args.optimizer != 'Initial':
-            scheduler.step()
-        val_loss, val_f1 = evaluate(args, model, valid_loader, mode='valid', es_patience=es_patience)
+        t_start = time.time()
+        loss_train, f1_train = train(args, model, train_loader, optimizer)
+        scheduler.step()
+        print('  | Train | loss {:5.4f} | F1 {:5.4f} | {:5.2f} s |'.format(loss_train, f1_train, time.time() - t_start))
+        val_loss, val_f1 = evaluate(args, model, valid_loader)
 
         # Save the model if the validation loss is the best we've seen so far.
         if val_f1 > best_f1:
+            if val_f1 - best_f1 > args.eps_f1:
+                es_patience = 0  # reset if beyond threshold
             with open(args.path_model, 'wb') as f:
                 torch.save(model, f)
             best_val_loss = val_loss
-            best_f1 = val_f1
             best_epoch = epoch
-            if val_f1 - best_f1 > args.eps_val:
-                es_patience = 0
+            best_f1 = val_f1
         else:
             # Early stopping condition
             es_patience += 1
@@ -150,12 +142,16 @@ def main():
                 print('  | Best | Epoch {:d} | Loss {:5.4f} | F1 {:5.4f} |'
                       .format(best_epoch, best_val_loss, best_f1))
                 break
+        # logging
+        print('  | Valid | loss {:5.4f} | F1 {:5.4f} | es_patience {:.0f} |'.format(val_loss, val_f1, es_patience))
 
     # Load the best saved model and test
     print('\n[Testing]')
     with open(args.path_model, 'rb') as f:
         model = torch.load(f)
-    evaluate(args, model, test_loader, es_patience, mode='test')
+    loss_test, f1_test = evaluate(args, model, test_loader)
+
+    print('  | Test | loss {:5.4f} | F1 {:5.4f} |'.format(loss_test, f1_test))
     print('[info] | char: {mode_char} | word: {mode_word} | CRF: {crf} |'
           .format(mode_char=args.mode_char, mode_word=args.mode_word, crf=args.enable_crf))
 

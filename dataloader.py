@@ -9,7 +9,6 @@ from utils import load_sentences, update_tag_scheme, prepare_dataset
 class CoNLLData(Dataset):
     """ CoNLLData Dataset """
     def __init__(self, args, data):
-        self.initial_preprocess = args.initial_preprocess
         self.data = data
         self.length = len(data)
         self.max_len_word = args.max_len_word
@@ -43,21 +42,7 @@ def collate_fn(insts, args):
     tags_batch = pad_sequence(tags_batch, batch_first=True, padding_value=args.idx_pad_tag)
     tags_batch = tags_batch.index_select(0, sorted_indices)
 
-    # if args.mode_word == 'lstm':
-    #     words_batch = pack_padded_sequence(words_batch, sorted_lens, batch_first=True)
-    #
-    # if args.mode_char == 'lstm':
-    #     chars_batch = pack_padded_sequence(chars_batch, sorted_lens, batch_first=True)
-
     return words_batch, chars_batch, tags_batch, sorted_lens
-
-
-def rearrange(data: torch.tensor,
-              new_idx: torch.tensor):
-    new_data = data.clone()
-    for i, (idx, sample) in enumerate(zip(new_idx, data)):
-        new_data[idx] = data[i]
-    return new_data
 
 
 def get_dataloader(args, word2idx, tag2idx, char2idx):
