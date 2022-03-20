@@ -27,9 +27,9 @@ def main():
                         help='path of the data corpus')
     parser.add_argument('--path_model', type=str, default='./result/models/model.pt',
                         help='path of the data corpus')
-    parser.add_argument('--num_worker', type=int, default=0,
+    parser.add_argument('--num_worker', type=int, default=5,
                         help='number of dataloader worker')
-    parser.add_argument('--batch_size', type=int, default=8, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=200, metavar='N',
                         help='batch size')
     parser.add_argument('--epochs', type=int, default=100,
                         help='upper epoch limit')
@@ -67,11 +67,11 @@ def main():
     # NLP related settings
     parser.add_argument('--mode_char', type=str, default='lstm',
                         help='character encoder: lstm or cnn')
-    parser.add_argument('--mode_word', type=str, default='cnn2',
+    parser.add_argument('--mode_word', type=str, default='cnn_d',
                         help='word encoder: lstm or cnn1, cnn2, cnn3, cnn_d')
     parser.add_argument('--enable_crf', type=bool, default=False,
                         help='employ CRF')
-    parser.add_argument('--filter_word', type=bool, default=True,
+    parser.add_argument('--filter_word', type=bool, default=False,
                         help='filter meaningless words')
 
     args = parser.parse_args()

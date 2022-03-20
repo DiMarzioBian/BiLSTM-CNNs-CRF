@@ -87,60 +87,58 @@ class BiLSTM_CRF(nn.Module):
         self.dropout1 = nn.Dropout(args.dropout)
 
         # word encoder
+        self.dim_in_word = self.dim_emb_word + self.dim_out_char * 2
         if self.mode_word == 'lstm':
-            self.lstm_word = nn.LSTM(self.dim_emb_word + self.dim_out_char * 2, self.dim_out_word, batch_first=True,
+            self.lstm_word = nn.LSTM(self.dim_in_word, self.dim_out_word, batch_first=True,
                                      bidirectional=True)
             init_lstm(self.lstm_word)
 
         elif self.mode_word == 'cnn1':
-            self.conv1 = nn.Conv2d(in_channels=1, out_channels=self.dim_out_char * 2,
-                                   kernel_size=(self.window_kernel, 1), padding=(self.window_kernel // 2, 0))
-            self.mp1 = nn.MaxPool2d((1, self.dim_emb_word + self.dim_out_char * 2))
+            self.conv1 = nn.Conv2d(in_channels=1, out_channels=self.dim_out_word * 2,
+                                   kernel_size=(self.window_kernel, self.dim_in_word),
+                                   padding=(self.window_kernel // 2, 0))
             init_linear(self.conv1)
 
         elif self.mode_word == 'cnn2':
-            self.conv1 = nn.Conv2d(in_channels=1, out_channels=self.dim_out_char * 2,
-                                   kernel_size=(self.window_kernel, 1), padding=(self.window_kernel // 2, 0))
-            self.conv2 = nn.Conv2d(in_channels=self.dim_out_char * 2, out_channels=self.dim_out_char * 2,
-                                   kernel_size=(self.window_kernel, 1), padding=(self.window_kernel // 2, 0))
-            self.mp1 = nn.MaxPool2d((1, 2))
-            self.mp2 = nn.MaxPool2d((1, (self.dim_emb_word + self.dim_out_char * 2) // 2))
+            self.conv1 = nn.Conv2d(in_channels=1, out_channels=self.dim_out_word * 2,
+                                   kernel_size=(self.window_kernel, self.dim_in_word),
+                                   padding=(self.window_kernel // 2, 0))
+            self.conv2 = nn.Conv2d(in_channels=1, out_channels=self.dim_out_word * 2,
+                                   kernel_size=(self.window_kernel, self.dim_out_word * 2),
+                                   padding=(self.window_kernel // 2, 0))
             init_linear(self.conv1)
             init_linear(self.conv2)
 
         elif self.mode_word == 'cnn3':
-            self.conv1 = nn.Conv2d(in_channels=1, out_channels=self.dim_out_char * 2,
-                                   kernel_size=(self.window_kernel, 1), padding=(self.window_kernel // 2, 0))
-            self.conv2 = nn.Conv2d(in_channels=self.dim_out_char * 2, out_channels=self.dim_out_char * 2,
-                                   kernel_size=(self.window_kernel, 1), padding=(self.window_kernel // 2, 0))
-            self.conv3 = nn.Conv2d(in_channels=self.dim_out_char * 2, out_channels=self.dim_out_char * 2,
-                                   kernel_size=(self.window_kernel, 1), padding=(self.window_kernel // 2, 0))
-            self.mp1 = nn.MaxPool2d((1, 2))
-            self.mp2 = nn.MaxPool2d((1, 2))
-            self.mp3 = nn.MaxPool2d((1, (self.dim_emb_word + self.dim_out_char * 2) // 4))
+            self.conv1 = nn.Conv2d(in_channels=1, out_channels=self.dim_out_word * 2,
+                                   kernel_size=(self.window_kernel, self.dim_in_word),
+                                   padding=(self.window_kernel // 2, 0))
+            self.conv2 = nn.Conv2d(in_channels=1, out_channels=self.dim_out_word * 2,
+                                   kernel_size=(self.window_kernel, self.dim_out_word * 2),
+                                   padding=(self.window_kernel // 2, 0))
+            self.conv3 = nn.Conv2d(in_channels=1, out_channels=self.dim_out_word * 2,
+                                   kernel_size=(self.window_kernel, self.dim_out_word * 2),
+                                   padding=(self.window_kernel // 2, 0))
             init_linear(self.conv1)
             init_linear(self.conv2)
             init_linear(self.conv3)
 
         elif self.mode_word == 'cnn_d':
-            self.conv1 = nn.Conv2d(in_channels=1, out_channels=self.dim_out_char * 2, kernel_size=(1, 2),
-                                   padding=(0, 0), dilation=(1, 1))
-            self.conv2 = nn.Conv2d(in_channels=self.dim_out_char * 2, out_channels=self.dim_out_char * 2,
-                                   kernel_size=(1, 2), padding=(0, 0), dilation=(2, 2))
-            self.conv3 = nn.Conv2d(in_channels=self.dim_out_char * 2, out_channels=self.dim_out_char * 2,
-                                   kernel_size=(1, 2), padding=(0, 0), dilation=(3, 3))
-            self.mp1 = nn.MaxPool2d((1, 2))
-            self.mp2 = nn.MaxPool2d((1, 2))
-            self.mp3 = nn.MaxPool2d((1, ((self.dim_emb_word + self.dim_out_char * 2 - 1) // 2 - 2) // 2 - 3))  # 33
+            self.conv1 = nn.Conv2d(in_channels=1, out_channels=self.dim_out_word * 2,
+                                   kernel_size=(self.window_kernel, self.dim_in_word),
+                                   padding=(self.window_kernel // 2, 0), dilation=(1, 1))
+            self.conv2 = nn.Conv2d(in_channels=1, out_channels=self.dim_out_word * 2,
+                                   kernel_size=(self.window_kernel, self.dim_out_word * 2),
+                                   padding=((self.window_kernel // 2) * 2, 0), dilation=(2, 1))
+            self.conv3 = nn.Conv2d(in_channels=1, out_channels=self.dim_out_word * 2,
+                                   kernel_size=(self.window_kernel, self.dim_out_word * 2),
+                                   padding=((self.window_kernel // 2) * 3, 0), dilation=(3, 1))
             init_linear(self.conv1)
             init_linear(self.conv2)
             init_linear(self.conv3)
 
         else:
             raise Exception('Word encoder mode '+self.mode_char+' unknown...')
-
-        # for l in self.conv_word:
-        #     if l
 
         self.dropout2 = nn.Dropout(args.dropout)
 
@@ -152,7 +150,11 @@ class BiLSTM_CRF(nn.Module):
             self.transitions.data[self.tag2idx[self.START_TAG], :] = -10000
             self.transitions.data[:, self.tag2idx[self.STOP_TAG]] = -10000
 
-    def forward(self, words_batch, chars_batch, tags_batch, lens_word):
+    @staticmethod
+    def reformat_conv2d(t):
+        return t.squeeze(-1).transpose(-1, -2).unsqueeze(1)
+
+    def forward(self, words_batch, chars_batch, lens_word):
         len_batch, len_sent = words_batch.shape
 
         # character-level modelling
@@ -197,40 +199,32 @@ class BiLSTM_CRF(nn.Module):
             enc_word, _ = pad_packed_sequence(out_lstm_word, batch_first=True)
 
         elif self.mode_word == 'cnn1':
-            out_cnn_word = self.conv1(emb_words_chars.view(len_batch * len_sent, 1, 1,
-                                                           self.dim_emb_word + self.dim_out_char * 2))
-            enc_word = self.mp1(out_cnn_word)
+            out_cnn_word = self.conv1(emb_words_chars.unsqueeze(1))
+            enc_word = self.reformat_conv2d(out_cnn_word).squeeze(1)
 
         elif self.mode_word == 'cnn2':
-            out_cnn_word = self.conv1(emb_words_chars.view(len_batch * len_sent, 1, 1,
-                                                           self.dim_emb_word + self.dim_out_char * 2))
-            out_cnn_word = self.mp1(out_cnn_word)
+            out_cnn_word = self.conv1(emb_words_chars.unsqueeze(1))
+            out_cnn_word = self.reformat_conv2d(out_cnn_word)
             out_cnn_word = self.conv2(out_cnn_word)
-            enc_word = self.mp2(out_cnn_word)
-            x = 1
+            enc_word = self.reformat_conv2d(out_cnn_word).squeeze(1)
 
         elif self.mode_word in ['cnn3', 'cnn_d']:
-            out_cnn_word = self.conv1(emb_words_chars.view(len_batch * len_sent, 1, 1,
-                                                           self.dim_emb_word + self.dim_out_char * 2))
-            # out_cnn_word = self.mp1(out_cnn_word)
+            out_cnn_word = self.conv1(emb_words_chars.unsqueeze(1))
+            out_cnn_word = self.reformat_conv2d(out_cnn_word)
             out_cnn_word = self.conv2(out_cnn_word)
-            # out_cnn_word = self.mp2(out_cnn_word)
+            out_cnn_word = self.reformat_conv2d(out_cnn_word)
             out_cnn_word = self.conv3(out_cnn_word)
-            # enc_word = self.mp3(out_cnn_word)
-            x = 1
+            enc_word = self.reformat_conv2d(out_cnn_word).squeeze(1)
 
         else:
             raise Exception('Unknown word encoder: '+self.mode_word+'...')
 
-        if self.mode_word == 'lstm':
-            outputs = self.hidden2tag(enc_word)
-        else:
-            outputs = self.hidden2tag(enc_word.squeeze(-1).squeeze(-1).view(len_batch, len_sent, self.dim_out_word * 2))
+        outputs = self.hidden2tag(enc_word)
         return outputs
 
     def get_loss(self, words_batch, chars_batch, tags_batch, lens_batch):
         """ calculate both predicted scores and losses"""
-        feats_batch = self.forward(words_batch, chars_batch, tags_batch, lens_batch)
+        feats_batch = self.forward(words_batch, chars_batch, lens_batch)
 
         if self.enable_crf:
             loss_batch, pred_batch = [], []
@@ -242,7 +236,7 @@ class BiLSTM_CRF(nn.Module):
                 score, pred = self.viterbi_decode(feats)
                 loss_batch.append(forward_score - gold_score)
                 pred_batch.append(pred)
-            x = 1
+
             return torch.stack(loss_batch).sum() / lens_batch.sum(), pred_batch
         else:
             loss = F.cross_entropy(feats_batch.view(-1, self.n_tag), tags_batch.view(-1), ignore_index=self.idx_pad_tag)
