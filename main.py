@@ -16,7 +16,7 @@ def main():
     parser.add_argument('--seed', type=int, default=1111,
                         help='random seed')
     parser.add_argument('--device', type=str, default='cuda:0',
-                        help='device for modeling')
+                        help='device for computing')
     parser.add_argument('--path_data', type=str, default='./data/raw/',
                         help='path of the data corpus')
     parser.add_argument('--path_processed', type=str, default='./data/data_bundle.pkl',
@@ -26,7 +26,7 @@ def main():
     parser.add_argument('--path_pretrained', type=str, default='./data/trained-model-cpu',
                         help='path of the data corpus')
     parser.add_argument('--path_model', type=str, default='./result/models/model.pt',
-                        help='path of the data corpus')
+                        help='path of the trained model')
     parser.add_argument('--num_worker', type=int, default=5,
                         help='number of dataloader worker')
     parser.add_argument('--batch_size', type=int, default=200, metavar='N',
@@ -34,7 +34,7 @@ def main():
     parser.add_argument('--epochs', type=int, default=100,
                         help='upper epoch limit')
     parser.add_argument('--es_patience_max', type=int, default=10,
-                        help='Max early stopped patience')
+                        help='max early stopped patience')
 
     # dimension setting
     parser.add_argument('--dim_emb_char', type=int, default=25,
