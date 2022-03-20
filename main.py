@@ -13,20 +13,6 @@ from epoch import train, evaluate
 
 def main():
     parser = argparse.ArgumentParser(description='BiLSTM-CNNs-CRF project')
-    parser.add_argument('--seed', type=int, default=1111,
-                        help='random seed')
-    parser.add_argument('--device', type=str, default='cuda:0',
-                        help='device for computing')
-    parser.add_argument('--path_data', type=str, default='./data/raw/',
-                        help='path of the data corpus')
-    parser.add_argument('--path_processed', type=str, default='./data/data_bundle.pkl',
-                        help='path of the processed data information')
-    parser.add_argument('--path_filtered', type=str, default='./data/data_filtered_bundle.pkl',
-                        help='path to save the filtered processed data')
-    parser.add_argument('--path_pretrained', type=str, default='./data/trained-model-cpu',
-                        help='path of the data corpus')
-    parser.add_argument('--path_model', type=str, default='./result/models/model.pt',
-                        help='path of the trained model')
     parser.add_argument('--num_worker', type=int, default=5,
                         help='number of dataloader worker')
     parser.add_argument('--batch_size', type=int, default=200, metavar='N',
@@ -67,12 +53,28 @@ def main():
     # NLP related settings
     parser.add_argument('--mode_char', type=str, default='lstm',
                         help='character encoder: lstm or cnn')
-    parser.add_argument('--mode_word', type=str, default='cnn_d',
+    parser.add_argument('--mode_word', type=str, default='cnn2',
                         help='word encoder: lstm or cnn1, cnn2, cnn3, cnn_d')
     parser.add_argument('--enable_crf', type=bool, default=False,
                         help='employ CRF')
     parser.add_argument('--filter_word', type=bool, default=False,
                         help='filter meaningless words')
+
+    # Default settings
+    parser.add_argument('--seed', type=int, default=1111,
+                        help='random seed')
+    parser.add_argument('--device', type=str, default='cuda:0',
+                        help='device for computing')
+    parser.add_argument('--path_data', type=str, default='./data/raw/',
+                        help='path of the data corpus')
+    parser.add_argument('--path_processed', type=str, default='./data/data_bundle.pkl',
+                        help='path of the processed data information')
+    parser.add_argument('--path_filtered', type=str, default='./data/data_filtered_bundle.pkl',
+                        help='path to save the filtered processed data')
+    parser.add_argument('--path_pretrained', type=str, default='./data/trained-model-cpu',
+                        help='path of the data corpus')
+    parser.add_argument('--path_model', type=str, default='./result/models/model.pt',
+                        help='path of the trained model')
 
     args = parser.parse_args()
     args.device = torch.device(args.device)
@@ -98,7 +100,7 @@ def main():
     word2idx = mappings['word2idx']
     char2idx = mappings['char2idx']
     tag2idx = mappings['tag2idx']
-    args.max_len_word = max([len(s) for s in word2idx.keys()])
+    args.max_len_word = max([max([len(s) for s in word2idx.keys()]), 37])  # 37 is the longest length in testing set
     args.idx_pad_char = max(char2idx.values()) + 1
     args.idx_pad_word = max(word2idx.values()) + 1
     args.idx_pad_tag = max(tag2idx.values()) + 1
@@ -118,9 +120,13 @@ def main():
                                  weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_step, gamma=args.lr_gamma)
 
+    n_param = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
     # Start modeling
-    print('     | char: {mode_char} | word: {mode_word} | CRF: {crf} |'
-          .format(mode_char=args.mode_char, mode_word=args.mode_word, crf=args.enable_crf))
+    print('\n[info] | lr: {lr} | dropout: {dropout} |char: {mode_char} | word: {mode_word} | CRF: {crf} '
+          '| Param: {n_param} | '
+          .format(lr=args.lr, dropout=args.dropout, mode_char=args.mode_char, mode_word=args.mode_word,
+                  crf=args.enable_crf, n_param=n_param))
     best_val_loss = 1e5
     best_f1 = 0
     best_epoch = 0
@@ -162,8 +168,10 @@ def main():
     loss_test, f1_test = evaluate(args, model, test_loader)
 
     print('  | Test | loss {:5.4f} | F1 {:5.4f} |'.format(loss_test, f1_test))
-    print('[info] | char: {mode_char} | word: {mode_word} | CRF: {crf} |'
-          .format(mode_char=args.mode_char, mode_word=args.mode_word, crf=args.enable_crf))
+    print('\n[info] | lr: {lr} | dropout: {dropout} |char: {mode_char} | word: {mode_word} | CRF: {crf} '
+          '| Param: {n_param} | '
+          .format(lr=args.lr, dropout=args.dropout, mode_char=args.mode_char, mode_word=args.mode_word,
+                  crf=args.enable_crf, n_param=n_param))
 
 
 if __name__ == '__main__':
