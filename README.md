@@ -74,25 +74,23 @@ No arguments will run the model in the settings that achieved best result.
 
 ## File structure
 ```bash
-----P1_CE7455\
-    |----correlation.py
+----BiLSTM-CNNs-CRF\
     |----data\
-    |    |----wikitext-2\
-    |    |    |----README
-    |    |    |----test.txt
-    |    |    |----train.txt
-    |    |    |----valid.txt
-    |    |----wordsim353_sim_rel\
-    |    |    |----wordsim_similarity_goldstandard.txt
+    |    |----raw\
+    |    |    |----eng.testa
+    |    |    |----eng.testb
+    |    |    |----eng.train
+    |    |    |----glove.6B.100d.txt
+    |    |----data_bundle.pkl
+    |    |----data_filtered_bundle.pkl
+    |----data\
+    |    |----models\
+    |    |    |----model.pt
     |----dataloader.py
     |----epoch.py
-    |----generate.py
     |----main.py
     |----model.py
+    |----prepare_data.py
     |----README.md
-    |----requirements.txt
-    |----result\
-    |    |----generated.txt
-    |----saved_model\
-    |    |----model.pt
+    |----utils.py
 ```
