@@ -2,7 +2,7 @@
 
 ## Warning: this repo implements batch processs to accelerate, but I am new to NLP, the character padding and word padding are not written in good gramma, which leads to performance downgrade, F1: 0.81. The original repo use 1 batch size and acheived F1: 0.92.
 
-This is a PyTorch implementation for the ACL'16 paper [End-to-end Sequence Labeling via Bi-directional LSTM-CNNs-CRF](https://aclanthology.org/P16-1101/)
+This is an unofficial PyTorch implementation for the ACL'16 paper [End-to-end Sequence Labeling via Bi-directional LSTM-CNNs-CRF](https://aclanthology.org/P16-1101/)
 
 
 
